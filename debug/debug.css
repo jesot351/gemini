@@ -1,0 +1,61 @@
+.thread-lane {
+	position: relative;
+	margin-top: 5px;
+	height: 20px;
+	clear: both;
+	border: none;
+}
+
+.sched {
+	position: absolute;
+	height: 20px;
+	border: 1px solid;
+}
+
+.exec {
+	position: absolute;
+	height: 20px;
+	border: 1px solid;
+	text-align: center;
+}
+
+.time-stats {
+	margin: 10px;
+}
+
+.legend {
+	width: 100%;
+	position: fixed;
+	margin-top: 10px;
+}
+
+.legend div {
+	width: 70px;
+	text-align: center;
+	margin: 4px 0px;
+}
+
+.stack-0 {
+	background-color: #00cc00;
+}
+.stack-1 {
+	background-color: #00ccff;
+}
+.stack-2 {
+	background-color: #ffff00;
+}
+.stack-3 {
+	background-color: #ffcc00;
+}
+.stack-4 {
+	background-color: #ff0000;
+}
+.stack-5 {
+	background-color: #ff6600;
+}
+.stack-6 {
+	background-color: #00ff00;
+}
+.stack-7 {
+	background-color: #0000ff;
+}
