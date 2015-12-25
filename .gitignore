@@ -6,6 +6,7 @@
 !*.cc
 !.gitignore
 !.md
+!Makefile
 !debug/
 !debug/debug.css
 !debug/process_debug.py
