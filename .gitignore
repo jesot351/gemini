@@ -1,0 +1,10 @@
+*
+!*.cpp
+!*.h
+!*.hpp
+!*.c
+!*.cc
+!.gitignore
+!.md
+!debug/debug.css
+!debug/process_debug.py
