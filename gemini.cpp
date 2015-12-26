@@ -32,7 +32,7 @@ typedef struct
     void* args;
     uint32_t required_lock;
     uint32_t exclusive_execution;
-} task_t;
+} ALIGN(16) task_t;
 
 inline uint32_t asm_bsf(uint32_t m)
 {
