@@ -117,8 +117,7 @@ ALIGN(64) std::atomic<uint32_t> s_stack_sizes[NUM_STACKS];
 ALIGN(64) std::atomic<uint32_t> s_stack_locks[NUM_STACKS];
 ALIGN(64) std::atomic<uint32_t> s_stack_running[NUM_STACKS];
 ALIGN(64) uint32_t s_iterations[NUM_STACKS];
-std::atomic<uint32_t> s_pri_mask;
-std::atomic<uint32_t> s_main_stack;
+std::atomic<uint64_t> s_pri_mask_main_stack;
 
 
 int main()
@@ -167,7 +166,7 @@ int main()
     s_stack_locks[14].store(1, std::memory_order_relaxed);
     s_stack_locks[15].store(1, std::memory_order_relaxed);
 
-    s_pri_mask.store((1<<NUM_ACTIVE_STACKS)-1, std::memory_order_relaxed);
+    s_pri_mask_main_stack.store((1<<NUM_ACTIVE_STACKS)-1, std::memory_order_relaxed);
 
     std::thread workers[NUM_THREADS];
     for (int i = 0; i < NUM_THREADS; ++i)
@@ -206,8 +205,9 @@ void worker_thread(uint32_t thread_id)
         uint64_t rdtscp_ss = asm_rdtscp();
         #endif
 
-        uint32_t main_stack = s_main_stack.load(std::memory_order_acquire);
-        uint32_t m = s_pri_mask.load(std::memory_order_relaxed);
+        uint64_t pri_mask_main_stack = s_pri_mask_main_stack.load(std::memory_order_acquire);
+        uint32_t main_stack = (uint32_t) (pri_mask_main_stack>>32);
+        uint32_t m = (uint32_t) pri_mask_main_stack;
 
         s_stack_locks[sl0].fetch_sub(l0, std::memory_order_relaxed);
         uint32_t ss0 = s_stack_sizes[main_stack].load(std::memory_order_acquire);
@@ -246,6 +246,12 @@ void worker_thread(uint32_t thread_id)
 
             if (!c)
             {
+                if (!m) // only happens when we run out of ready tasks
+                {
+                    pri_mask_main_stack = s_pri_mask_main_stack.load(std::memory_order_acquire);
+                    m = (uint32_t) pri_mask_main_stack;
+                    main_stack = (uint32_t) (pri_mask_main_stack>>32);
+                }
                 k = asm_bsf(m);
                 next_pri = (k + main_stack) % 32;
                 m &= ~(1<<k);
@@ -256,7 +262,7 @@ void worker_thread(uint32_t thread_id)
         // is this thread safe enough?
         if (s_stack_sizes[s].load(std::memory_order_relaxed) == 0)
         {
-             main_stack = s_main_stack.load(std::memory_order_relaxed);
+             main_stack = (uint32_t) (s_pri_mask_main_stack.load(std::memory_order_relaxed)>>32);
 
             __m128i  i = _mm_set1_epi32(s_iterations[main_stack] + 1);
             __m128i ms = _mm_set1_epi32(main_stack);
@@ -302,8 +308,8 @@ void worker_thread(uint32_t thread_id)
             main_stack = (k + main_stack) % 32;
                      m = (m >> k) | (m << (32 - k));
 
-            s_pri_mask.store(m, std::memory_order_relaxed);
-            s_main_stack.store(main_stack, std::memory_order_release);
+            // pack to guarantee conformity between pri mask and main stack
+            s_pri_mask_main_stack.store(((uint64_t) main_stack)<<32 | m, std::memory_order_release);
         }
 
         #if DEBUG
