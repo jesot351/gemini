@@ -3,6 +3,7 @@ def process_debug(i="debug.txt", o="debug.html"):
     fo = open(o, "w")
 
     ms_px_mult = 1000
+    time_offset = 100000000
     total_sched = 0
     total_exec = 0
     total_rdtscp_s = 0
@@ -21,16 +22,18 @@ def process_debug(i="debug.txt", o="debug.html"):
         elif "----" in line:
             pass
         else:
-            ss, se, ee, rdtscp_s, rdtscp_e, s, e, l = [ float(x.strip()) for x in line.split("|") ]
-            s, e, l = [ int(x) for x in [ s, e, l ] ]
+            ss, se, ee, rdtscp_s, rdtscp_e, s, scp_prev, scp_curr = [ float(x.strip()) for x in line.split("|") ]
+            s, scp_prev, scp_curr = [ int(x) for x in [ s, scp_prev, scp_curr ] ]
+            if ss < time_offset:
+                time_offset = ss
             total_sched += (se - ss)
             total_exec += (ee - se)
             total_rdtscp_s += rdtscp_s
             total_rdtscp_e += rdtscp_e
             if ss:
                 n_tasks += 1
-                fo.write("\t\t\t<div class=\"sched\" style=\"left: {0}px; width: {1}px;\"></div>\n".format(ss*ms_px_mult, (se-ss)*ms_px_mult))
-                fo.write("\t\t\t<div class=\"exec stack-{0}\" style=\"left: {1}px; width: {2}px;\">{3} {4}</div>\n".format(s, se*ms_px_mult, (ee-se)*ms_px_mult, "e" if e else "", l if l != 15 else ""))
+                fo.write("\t\t\t<div class=\"sched\" style=\"left: {0}px; width: {1}px;\"></div>\n".format((ss-time_offset)*ms_px_mult, (se-ss)*ms_px_mult))
+                fo.write("\t\t\t<div class=\"exec stack-{0}\" style=\"left: {1}px; width: {2}px;\">{3} {4}</div>\n".format(s, (se-time_offset)*ms_px_mult, (ee-se)*ms_px_mult, scp_prev, scp_curr))
 
     fo.write("\t\t</div>\n")
 
