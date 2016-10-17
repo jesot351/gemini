@@ -39,7 +39,7 @@ namespace MMemory
         do
         {
             old = _mem512x32kb_allocmask[segment];
-            block = MPlatform::asm_bsf(old);
+            block = MPlatform::asm_bsf64(old);
 
             if (!old)
             {
@@ -82,7 +82,7 @@ namespace MMemory
         do
         {
             old = _mem512x32kb_allocmask[segment];
-            block = MPlatform::asm_bsf(old);
+            block = MPlatform::asm_bsf64(old);
 
             if (!old)
             {

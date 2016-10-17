@@ -60,7 +60,7 @@ namespace MTaskScheduling
 
         s_pri_mask_main_stack.store((1<<NUM_ACTIVE_STACKS)-1, std::memory_order_relaxed); // all stacks allowed, main_stack 0
         s_checkpoints[0].store(0xFFFFFFFFFFFFFFFF, std::memory_order_relaxed); // none passed in frame 0
-        s_checkpoints[1].store(0xFFFFFFFFFFFFFFFF ^ SCP_NEVER, std::memory_order_relaxed); // all but SCP_NEVER passed in frame -1
+        s_checkpoints[1].store(0xFFFFFFFFFFFFFFFF, std::memory_order_relaxed); // all passed in frame -1
     }
 
     void worker_thread(uint32_t thread_id)
@@ -82,7 +82,7 @@ namespace MTaskScheduling
             task_t task;
 
             uint64_t c;
-            uint32_t k = asm_bsr( ( ((uint32_t) ((ss >> 7) == s_iterations[s].load(std::memory_order_relaxed)) << (s - main_stack) % 32) | 1 ) & m);
+            uint32_t k = asm_bsr32( ( ((uint32_t) ((ss >> 7) == s_iterations[s].load(std::memory_order_relaxed)) << (s - main_stack) % 32) | 1 ) & m);
             uint32_t next_pri = (k + main_stack) % 32;
 //            uint32_t pm = m;
             m &= ~(1 << k);
@@ -126,7 +126,7 @@ namespace MTaskScheduling
                         m = (uint32_t) pri_mask_main_stack;
                         main_stack = (uint32_t) (pri_mask_main_stack>>32);
                     }
-                    k = asm_bsf(m);
+                    k = asm_bsf32(m);
                     next_pri = (k + main_stack) % 32;
                     m &= ~(1 << k);
                 }
@@ -176,7 +176,7 @@ namespace MTaskScheduling
 
                     uint32_t m = _mm_movemask_epi8(c);
                              m = (m >> main_stack) | (m << (32 - main_stack));
-                             k = asm_bsf(m);
+                             k = asm_bsf32(m);
                     uint32_t old_main_stack = main_stack;
                     main_stack = (k + main_stack) % 32;
                              m = (m >> k) | (m << (32 - k));
