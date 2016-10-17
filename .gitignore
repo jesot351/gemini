@@ -7,6 +7,9 @@
 !.gitignore
 !.md
 !Makefile
+!src
+!src/systems
+!src/managers
 !debug/
 !debug/debug.css
 !debug/process_debug.py

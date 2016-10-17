@@ -1,17 +1,25 @@
-FLAGS=-std=c++11 -Wall -Wextra -Wno-unused-parameter -march=native -O2
-DEBUG_FLAGS=-std=c++11 -Wall -Wextra -Wno-unused-parameter -march=native -O2 -g
-LIBS=-pthread
-CPPFILES=gemini.cpp TaskScheduling.cpp Platform.cpp Rendering.cpp Memory.cpp Input.cpp Physics.cpp Animation.cpp AI.cpp
-HEADERS=TaskScheduling.h Platform.h Rendering.h Memory.h Input.h Physics.h Animation.h AI.h
+SRC_DIR=src
+INC_DIR=src
 
-gemini: $(CPPFILES) $(HEADERS)
-	g++ $(FLAGS) $(CPPFILES) -o gemini $(LIBS)
+EXEC=gemini
+SRCS=$(SRC_DIR)/$(EXEC).cpp $(wildcard $(SRC_DIR)/systems/*.cpp) $(wildcard $(SRC_DIR)/managers/*.cpp)
+OBJS=$(SRCS:.cpp=.o)
 
-asm: $(CPPFILES) $(HEADERS)
-	g++ $(FLAGS) $(CPPFILES) $(LIBS) -S -fverbose-asm
+CC=g++
+CFLAGS=-std=c++11 -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -march=native -O2
+LDFLAGS=-pthread
+INCLUDES=-I$(INC_DIR)
 
-debug: $(CPPFILES) $(HEADERS)
-	g++ $(DEBUG_FLAGS) $(CPPFILES) -o gemini_debug $(LIBS)
+all: $(EXEC)
+
+$(EXEC): $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(INCLUDES) $(LDFLAGS)
+
+%.o: %.cpp
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+%.o: %.cpp %.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
 clean:
-	rm -f gemini *~ *.o
+	rm -f $(EXEC) $(OBJS) *~

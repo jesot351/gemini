@@ -1,5 +1,5 @@
-#include "TaskScheduling.h"
-#include "Platform.h"
+#include "managers/TaskScheduling.h"
+#include "managers/Platform.h"
 
 #include <atomic>
 #include <cassert>

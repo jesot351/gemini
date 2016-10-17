@@ -1,16 +1,16 @@
-#include "Animation.h"
-#include "TaskScheduling.h"
-#include "Memory.h"
+#include "systems/Physics.h"
+#include "managers/TaskScheduling.h"
+#include "managers/Memory.h"
 
 #include <unistd.h> // usleep()
 #include <iostream>
 
-namespace SAnimation
+namespace SPhysics
 {
     uint32_t system_id;
     MMemory::LinearAllocator32kb task_args_memory;
 
-    void init_animation(uint32_t assigned_system_id)
+    void init_physics(uint32_t assigned_system_id)
     {
         system_id = assigned_system_id;
         task_args_memory.Init();
@@ -20,12 +20,13 @@ namespace SAnimation
     std::atomic<uint32_t> num_executed_group1;
     std::atomic<uint32_t> num_executed_group2;
     std::atomic<uint32_t> num_executed_group3;
+    std::atomic<uint32_t> num_executed_group4;
 
     uint64_t submit_tasks(void* args, uint32_t thread_id)
     {
-        #if PROFILING
+#if PROFILING
         MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-        #endif
+#endif
 
         task_args_memory.Clear();
 
@@ -34,8 +35,37 @@ namespace SAnimation
         task.execute = submit_tasks;
         task.args = nullptr;
         task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-        task.checkpoints_current_frame = MTaskScheduling::SCP_ANIMATION3;
+        task.checkpoints_current_frame = MTaskScheduling::SCP_PHYSICS4;
         MTaskScheduling::s_stacks[system_id][stack_size] = task;
+
+        // 10 tasks in task group 4
+        num_executed_group4.store(9, std::memory_order_relaxed);
+        for (uint32_t i = 0; i < 10; ++i)
+        {
+            ++stack_size;
+            MTaskScheduling::task_t task;
+            task.execute = task_group4;
+            task_group4_args_t* args = new(task_args_memory) task_group4_args_t;
+            args->counter = &num_executed_group4;
+            task.args = args;
+            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
+            task.checkpoints_current_frame = MTaskScheduling::SCP_PHYSICS3;
+            MTaskScheduling::s_stacks[system_id][stack_size] = task;
+        }
+
+        // 4 independent tasks
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            ++stack_size;
+            MTaskScheduling::task_t task;
+            task.execute = independent_task;
+            independent_task_args_t* args = new(task_args_memory) independent_task_args_t;
+            args->some_param = 42 - i;
+            task.args = args;
+            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
+            task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
+            MTaskScheduling::s_stacks[system_id][stack_size] = task;
+        }
 
         // 10 tasks in task group 3
         num_executed_group3.store(9, std::memory_order_relaxed);
@@ -47,8 +77,8 @@ namespace SAnimation
             task_group3_args_t* args = new(task_args_memory) task_group3_args_t;
             args->counter = &num_executed_group3;
             task.args = args;
-            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_ANIMATION2;
+            task.checkpoints_previous_frame = MTaskScheduling::SCP_RENDERING2;
+            task.checkpoints_current_frame = MTaskScheduling::SCP_PHYSICS2;
             MTaskScheduling::s_stacks[system_id][stack_size] = task;
         }
 
@@ -77,7 +107,7 @@ namespace SAnimation
             args->counter = &num_executed_group2;
             task.args = args;
             task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_INPUT1 | MTaskScheduling::SCP_ANIMATION1;
+            task.checkpoints_current_frame = MTaskScheduling::SCP_PHYSICS1;
             MTaskScheduling::s_stacks[system_id][stack_size] = task;
         }
 
@@ -104,6 +134,20 @@ namespace SAnimation
             task.execute = task_group1;
             task_group1_args_t* args = new(task_args_memory) task_group1_args_t;
             args->counter = &num_executed_group1;
+            task.args = args;
+            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
+            task.checkpoints_current_frame = MTaskScheduling::SCP_INPUT1;
+            MTaskScheduling::s_stacks[system_id][stack_size] = task;
+        }
+
+        // 4 independent tasks
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            ++stack_size;
+            MTaskScheduling::task_t task;
+            task.execute = independent_task;
+            independent_task_args_t* args = new(task_args_memory) independent_task_args_t;
+            args->some_param = 42 + i;
             task.args = args;
             task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
             task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
@@ -139,7 +183,7 @@ namespace SAnimation
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
         uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
         if (count == 0)
-            reached_checkpoints = MTaskScheduling::SCP_ANIMATION1;
+            reached_checkpoints = MTaskScheduling::SCP_PHYSICS1;
 
         return reached_checkpoints;
     }
@@ -157,7 +201,7 @@ namespace SAnimation
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
         uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
         if (count == 0)
-            reached_checkpoints = MTaskScheduling::SCP_ANIMATION2;
+            reached_checkpoints = MTaskScheduling::SCP_PHYSICS2;
 
         return reached_checkpoints;
     }
@@ -175,7 +219,25 @@ namespace SAnimation
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
         uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
         if (count == 0)
-            reached_checkpoints = MTaskScheduling::SCP_ANIMATION3;
+            reached_checkpoints = MTaskScheduling::SCP_PHYSICS3;
+
+        return reached_checkpoints;
+    }
+
+    uint64_t task_group4(void* args, uint32_t thread_id)
+    {
+        task_group4_args_t* pargs = (task_group4_args_t*) args;
+
+#if PROFILING
+        MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
+#endif
+
+        usleep(100);
+
+        uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
+        uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
+        if (count == 0)
+            reached_checkpoints = MTaskScheduling::SCP_PHYSICS4;
 
         return reached_checkpoints;
     }

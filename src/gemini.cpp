@@ -1,10 +1,10 @@
-#include "Memory.h"
-#include "TaskScheduling.h"
-#include "Input.h"
-#include "Physics.h"
-#include "Animation.h"
-#include "AI.h"
-#include "Rendering.h"
+#include "managers/Memory.h"
+#include "managers/TaskScheduling.h"
+#include "systems/Input.h"
+#include "systems/Physics.h"
+#include "systems/Animation.h"
+#include "systems/AI.h"
+#include "systems/Rendering.h"
 
 #include <iostream>
 #include <thread>

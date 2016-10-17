@@ -1,5 +1,5 @@
-#include "Memory.h"
-#include "Platform.h"
+#include "managers/Memory.h"
+#include "managers/Platform.h"
 
 #include <cstdlib>
 #include <cassert>

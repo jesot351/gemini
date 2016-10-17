@@ -1,6 +1,6 @@
-#include "Input.h"
-#include "TaskScheduling.h"
-#include "Memory.h"
+#include "systems/Input.h"
+#include "managers/TaskScheduling.h"
+#include "managers/Memory.h"
 
 #include <unistd.h> // usleep()
 #include <iostream>
