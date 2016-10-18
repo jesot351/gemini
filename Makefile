@@ -14,10 +14,7 @@ INCLUDES=-I$(INC_DIR) -I$(VULKAN_SDK_PATH)/include
 all: $(EXEC)
 
 $(EXEC): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(INCLUDES) $(LDFLAGS)
-
-%.o: %.cpp %.h
-	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $(SRCS) $(INCLUDES) $(LDFLAGS)
 
 %.o: %.cpp
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<

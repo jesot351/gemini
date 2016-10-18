@@ -31,10 +31,6 @@ namespace SRendering
 
     uint64_t submit_tasks(void* args, uint32_t thread_id)
     {
-#if PROFILING
-        MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-#endif
-
         task_args_memory.Clear();
 
         uint32_t stack_size = 1;
@@ -139,10 +135,6 @@ namespace SRendering
 
     uint64_t independent_task(void* args, uint32_t thread_id)
     {
-#if PROFILING
-        MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-#endif
-
         usleep(100);
 
         return MTaskScheduling::SCP_NONE;
@@ -151,10 +143,6 @@ namespace SRendering
     uint64_t task_group1(void* args, uint32_t thread_id)
     {
         task_group1_args_t* pargs = (task_group1_args_t*) args;
-
-#if PROFILING
-        MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-#endif
 
         usleep(100);
 
@@ -170,10 +158,6 @@ namespace SRendering
     {
         task_group2_args_t* pargs = (task_group2_args_t*) args;
 
-#if PROFILING
-        MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-#endif
-
         usleep(100);
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
@@ -187,10 +171,6 @@ namespace SRendering
     uint64_t task_group3(void* args, uint32_t thread_id)
     {
         task_group3_args_t* pargs = (task_group3_args_t*) args;
-
-#if PROFILING
-        MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-#endif
 
         usleep(100);
 

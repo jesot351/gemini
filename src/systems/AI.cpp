@@ -22,10 +22,6 @@ namespace SAI
 
     uint64_t submit_tasks(void* args, uint32_t thread_id)
     {
-        #if PROFILING
-        MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-        #endif
-
         task_args_memory.Clear();
 
         uint32_t stack_size = 1;
@@ -87,10 +83,6 @@ namespace SAI
 
     uint64_t independent_task(void* args, uint32_t thread_id)
     {
-#if PROFILING
-        MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-#endif
-
         usleep(100);
 
         return MTaskScheduling::SCP_NONE;
@@ -99,10 +91,6 @@ namespace SAI
     uint64_t task_group1(void* args, uint32_t thread_id)
     {
         task_group1_args_t* pargs = (task_group1_args_t*) args;
-
-#if PROFILING
-        MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-#endif
 
         usleep(100);
 
@@ -117,10 +105,6 @@ namespace SAI
     uint64_t task_group2(void* args, uint32_t thread_id)
     {
         task_group2_args_t* pargs = (task_group2_args_t*) args;
-
-#if PROFILING
-        MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-#endif
 
         usleep(100);
 

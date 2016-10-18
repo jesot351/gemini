@@ -41,9 +41,7 @@ int main()
         workers[i].join();
     }
 
-#if PROFILING
     MTaskScheduling::write_profiling();
-#endif
 
     std::cout << "total executed: " << MTaskScheduling::g_total_executed.load(std::memory_order_relaxed) << "\n";
 

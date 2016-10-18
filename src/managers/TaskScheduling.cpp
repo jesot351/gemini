@@ -24,16 +24,29 @@ namespace MTaskScheduling
     ALIGN(64) std::atomic<uint32_t> s_iterations[NUM_STACKS];
     std::atomic<uint64_t>           s_pri_mask_main_stack;
     std::atomic<uint64_t>           s_checkpoints[2];
-
     std::atomic<uint32_t>           g_quit_request;
     std::atomic<uint32_t>           g_total_executed;
     uint32_t                        g_frame;
 
 #if PROFILING
+    typedef struct
+    {
+        double sched_start;
+        double sched_end;
+        double exec_end;
+        uint64_t rdtscp_sched;
+        uint64_t rdtscp_exec;
+        uint32_t stack;
+        uint64_t checkpoints_previous_frame;
+        uint64_t checkpoints_current_frame;
+        uint64_t reached_checkpoints;
+    } profiling_item_t;
+
     uint32_t profiling_i[PROFILING_THREADS];
     profiling_item_t profiling_log[PROFILING_THREADS][PROFILING_SIZE];
+    uint64_t rdtscp_ss[PROFILING_THREADS];
+    uint64_t rdtscp_es[PROFILING_THREADS];
 #endif
-
 
     ALIGN(64) const uint32_t range_16[16]       = {          0,          1,          2,          3,
                                                              4,          5,          6,          7,
@@ -44,7 +57,6 @@ namespace MTaskScheduling
                                                     0x00008000, 0x00008000, 0x00008000, 0x00008000,
                                                     0x00000080, 0x00000080, 0x00000080, 0x00000080,
                                                     0x0F0B0703, 0x0E0A0602, 0x0D090501, 0x0C080400 };
-
 
     void init_scheduler()
     {
@@ -65,10 +77,8 @@ namespace MTaskScheduling
 
     void worker_thread(uint32_t thread_id)
     {
-#if PROFILING
-        profiling_log[thread_id][profiling_i[thread_id] % PROFILING_SIZE].sched_start = timepoint_to_double(std::chrono::high_resolution_clock::now());
-        uint64_t rdtscp_ss = asm_rdtscp();
-#endif
+        timepoint_to_double(std::chrono::high_resolution_clock::now());
+        prof_sched_start(thread_id);
 
         uint32_t s = 0;
         uint32_t ss = 0;
@@ -189,33 +199,18 @@ namespace MTaskScheduling
                 } while (!s_pri_mask_main_stack.compare_exchange_weak(old_pri_mask_main_stack, new_pri_mask_main_stack, std::memory_order_acq_rel));
             }
 
-#if PROFILING
-            uint64_t rdtscp_se = asm_rdtscp();
-            profiling_log[thread_id][profiling_i[thread_id] % PROFILING_SIZE].rdtscp_sched = rdtscp_se - rdtscp_ss;
-            profiling_log[thread_id][profiling_i[thread_id] % PROFILING_SIZE].sched_end = timepoint_to_double(std::chrono::high_resolution_clock::now());
-            profiling_log[thread_id][profiling_i[thread_id] % PROFILING_SIZE].checkpoints_previous_frame = task.checkpoints_previous_frame;
-            profiling_log[thread_id][profiling_i[thread_id] % PROFILING_SIZE].checkpoints_current_frame = task.checkpoints_current_frame;
-            uint64_t rdtscp_es = asm_rdtscp();
-#endif
+            prof_sched_end_exec_start(thread_id, s, &task);
 
             uint64_t reached_checkpoints = task.execute(task.args, thread_id);
 
-#if PROFILING
-            uint64_t rdtscp_ee = asm_rdtscp();
-            profiling_log[thread_id][profiling_i[thread_id] % PROFILING_SIZE].rdtscp_exec = rdtscp_ee - rdtscp_es;
-            profiling_log[thread_id][profiling_i[thread_id] % PROFILING_SIZE].exec_end = timepoint_to_double(std::chrono::high_resolution_clock::now());
-            ++profiling_i[thread_id];
-#endif
+            prof_exec_end(thread_id);
 
-            if (g_total_executed.fetch_add(1, std::memory_order_relaxed) == 100000)
+            if (g_total_executed.fetch_add(1, std::memory_order_relaxed) == 1000)
             {
                 g_quit_request.store(1, std::memory_order_relaxed);
             }
 
-#if PROFILING
-            profiling_log[thread_id][profiling_i[thread_id] % PROFILING_SIZE].sched_start = timepoint_to_double(std::chrono::high_resolution_clock::now());
-            rdtscp_ss = asm_rdtscp();
-#endif
+            prof_sched_start(thread_id);
 
             if (reached_checkpoints) // branch to avoid unnecessary lock instruction
             {
@@ -232,17 +227,45 @@ namespace MTaskScheduling
         return SCP_NONE;
     }
 
-#if PROFILING
-    double timepoint_to_double(std::chrono::time_point<std::chrono::high_resolution_clock> now)
-    {
-        static auto start = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> diff = now - start;
 
-        return diff.count();
+    // profiling functions
+    void prof_sched_start(uint32_t thread_id)
+    {
+#if PROFILING
+        uint32_t i = profiling_i[thread_id] % PROFILING_SIZE;
+        profiling_log[thread_id][i].sched_start = timepoint_to_double(std::chrono::high_resolution_clock::now());
+        rdtscp_ss[thread_id] = asm_rdtscp();
+#endif
+    }
+
+    void prof_sched_end_exec_start(uint32_t thread_id, uint32_t stack, task_t* task)
+    {
+#if PROFILING
+        uint64_t rdtscp_se = asm_rdtscp();
+        uint32_t i = profiling_i[thread_id] % PROFILING_SIZE;
+        profiling_log[thread_id][i].rdtscp_sched = rdtscp_se - rdtscp_ss[thread_id];
+        profiling_log[thread_id][i].sched_end = timepoint_to_double(std::chrono::high_resolution_clock::now());
+        profiling_log[thread_id][i].checkpoints_previous_frame = task->checkpoints_previous_frame;
+        profiling_log[thread_id][i].checkpoints_current_frame = task->checkpoints_current_frame;
+        profiling_log[thread_id][i].stack = stack;
+        rdtscp_es[thread_id] = asm_rdtscp();
+#endif
+    }
+
+    void prof_exec_end(uint32_t thread_id)
+    {
+#if PROFILING
+        uint64_t rdtscp_ee = asm_rdtscp();
+        uint32_t i = profiling_i[thread_id] % PROFILING_SIZE;
+        profiling_log[thread_id][i].rdtscp_exec = rdtscp_ee - rdtscp_es[thread_id];
+        profiling_log[thread_id][i].exec_end = timepoint_to_double(std::chrono::high_resolution_clock::now());
+        ++profiling_i[thread_id];
+#endif
     }
 
     void write_profiling()
     {
+#if PROFILING
         std::ofstream o;
         o.open("debug/debug.txt");
 
@@ -252,16 +275,27 @@ namespace MTaskScheduling
 
             for (uint32_t i = 0; i < PROFILING_SIZE; ++i)
             {
-                double ss = profiling_log[thread][i].sched_start;
-                double se = profiling_log[thread][i].sched_end;
-                double ee = profiling_log[thread][i].exec_end;
-                o << ss << " | " << se << " | " << ee << " | " << profiling_log[thread][i].rdtscp_sched << " | " << profiling_log[thread][i].rdtscp_exec << " | ";
-                o << profiling_log[thread][i].stack << " | " << profiling_log[thread][i].checkpoints_previous_frame << " | " << profiling_log[thread][i].checkpoints_current_frame << "\n";
-                o << "\t--------------------\n";
+                o << profiling_log[thread][i].sched_start << " | "
+                  << profiling_log[thread][i].sched_end << " | "
+                  << profiling_log[thread][i].exec_end << " | "
+                  << profiling_log[thread][i].rdtscp_sched << " | "
+                  << profiling_log[thread][i].rdtscp_exec << " | "
+                  << profiling_log[thread][i].stack << " | "
+                  << profiling_log[thread][i].checkpoints_previous_frame << " | "
+                  << profiling_log[thread][i].checkpoints_current_frame << "\n"
+                  << "\t--------------------\n";
             }
         }
 
         o.close();
-    }
 #endif
+    }
+
+    double timepoint_to_double(std::chrono::time_point<std::chrono::high_resolution_clock> now)
+    {
+        static auto start = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> diff = now - start;
+
+        return diff.count();
+    }
 }
