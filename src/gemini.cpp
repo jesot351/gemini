@@ -9,10 +9,17 @@
 #include <iostream>
 #include <thread>
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 int main()
 {
     MMemory::init_memory();
     MTaskScheduling::init_scheduler();
+
+    glfwInit();
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "gemini", nullptr, nullptr);
 
     SInput::init_input(0);
     SPhysics::init_physics(1);

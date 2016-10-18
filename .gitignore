@@ -7,7 +7,7 @@
 !.gitignore
 !.md
 !Makefile
-!src
+!src/
 !src/systems
 !src/managers
 !debug/

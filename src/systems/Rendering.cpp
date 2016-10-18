@@ -5,6 +5,9 @@
 #include <unistd.h> // usleep()
 #include <iostream>
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 namespace SRendering
 {
     uint32_t system_id;
@@ -13,6 +16,11 @@ namespace SRendering
     void init_rendering(uint32_t assigned_system_id)
     {
         system_id = assigned_system_id;
+
+        uint32_t extensionCount = 0;
+        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+        std::cout << extensionCount << " extensions supported" << std::endl;
+
         task_args_memory.Init();
         submit_tasks(nullptr, 0);
     }
@@ -23,9 +31,9 @@ namespace SRendering
 
     uint64_t submit_tasks(void* args, uint32_t thread_id)
     {
-        #if PROFILING
+#if PROFILING
         MTaskScheduling::profiling_log[thread_id][MTaskScheduling::profiling_i[thread_id] % MTaskScheduling::PROFILING_SIZE].stack = system_id;
-        #endif
+#endif
 
         task_args_memory.Clear();
 
