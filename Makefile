@@ -1,6 +1,6 @@
 SRC_DIR=src
 INC_DIR=src
-VULKAN_SDK_PATH = /home/jesper/Documents/VulkanSDK/1.0.30.0/x86_64
+VULKAN_SDK_PATH=/home/jesper/Documents/VulkanSDK/1.0.30.0/x86_64
 
 EXEC=gemini
 SRCS=$(SRC_DIR)/$(EXEC).cpp $(wildcard $(SRC_DIR)/systems/*.cpp) $(wildcard $(SRC_DIR)/managers/*.cpp)

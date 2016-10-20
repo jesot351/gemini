@@ -205,7 +205,7 @@ namespace MTaskScheduling
 
             prof_exec_end(thread_id);
 
-            if (g_total_executed.fetch_add(1, std::memory_order_relaxed) == 1000)
+            if (g_total_executed.fetch_add(1, std::memory_order_relaxed) == 10000000)
             {
                 g_quit_request.store(1, std::memory_order_relaxed);
             }

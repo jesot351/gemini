@@ -36,4 +36,6 @@ namespace SRendering
         std::atomic<uint32_t>* counter;
     } task_group3_args_t;
     uint64_t task_group3(void*, uint32_t);
+
+    uint64_t present_task(void*, uint32_t);
 }

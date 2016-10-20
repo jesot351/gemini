@@ -4,6 +4,7 @@
 
 #include <unistd.h> // usleep()
 #include <iostream>
+#include <chrono>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -33,9 +34,18 @@ namespace SRendering
     {
         task_args_memory.Clear();
 
+        // submit new tasks
         uint32_t stack_size = 1;
         MTaskScheduling::task_t task;
         task.execute = submit_tasks;
+        task.args = nullptr;
+        task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
+        task.checkpoints_current_frame = MTaskScheduling::SCP_RENDERING4;
+        MTaskScheduling::s_stacks[system_id][stack_size] = task;
+
+        // present task
+        ++stack_size;
+        task.execute = present_task;
         task.args = nullptr;
         task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
         task.checkpoints_current_frame = MTaskScheduling::SCP_RENDERING3;
@@ -180,5 +190,26 @@ namespace SRendering
             reached_checkpoints = MTaskScheduling::SCP_RENDERING3;
 
         return reached_checkpoints;
+    }
+
+    uint64_t present_task(void* args, uint32_t thread_id)
+    {
+        static std::chrono::time_point<std::chrono::high_resolution_clock> prev_t;
+        static std::chrono::time_point<std::chrono::high_resolution_clock> prev_present;
+        auto t = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::micro> frame_delta = t - prev_t;
+        std::chrono::duration<double, std::micro> present_delta = t - prev_present;
+
+        if (present_delta.count() > 1000000)
+        {
+            double ms = frame_delta.count() / 1000.0d;
+            std::cout << "frame: " << ms << " ms, " << 1000 / ms << " fps" << std::endl;
+
+            prev_present = t;
+        }
+
+        prev_t = t;
+
+        return MTaskScheduling::SCP_RENDERING4;
     }
 }
