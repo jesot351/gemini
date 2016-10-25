@@ -8,25 +8,29 @@
 
 #include <iostream>
 #include <thread>
+#include <mutex>
 
-#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 int main()
 {
+    // Initialize managers
     MMemory::init_memory();
     MTaskScheduling::init_scheduler();
 
+    // Initialize window
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(800, 600, "gemini", nullptr, nullptr);
 
+    // Initialize systems
     SInput::init_input(0);
     SPhysics::init_physics(1);
     SAnimation::init_animation(2);
     SAI::init_ai(3);
     SRendering::init_rendering(4);
 
+    // Launch worker threads
     uint32_t num_threads = MTaskScheduling::NUM_WORKER_THREADS;
     std::cout << "num threads: " << num_threads << "\n";
 
@@ -36,6 +40,10 @@ int main()
         workers[i] = std::thread(MTaskScheduling::worker_thread, i);
     }
 
+    // Enter input event loop
+    SInput::input_loop(window);
+
+    // Shut down worker threads
     for (uint32_t i = 0; i < num_threads; ++i)
     {
         workers[i].join();
@@ -45,7 +53,26 @@ int main()
 
     std::cout << "total executed: " << MTaskScheduling::g_total_executed.load(std::memory_order_relaxed) << "\n";
 
+    // Clear resources
     MMemory::clear_memory();
 
+    // Destroy window
+    glfwDestroyWindow(window);
+    glfwTerminate();
+
     return 0;
+}
+
+void signal_shutdown()
+{
+    // signal task scheduling manager
+    MTaskScheduling::g_quit_request.store(1, std::memory_order_relaxed);
+
+    // signal input loop
+    {
+        std::unique_lock<std::mutex> l(SInput::input_loop_sync.m);
+        SInput::input_loop_sync.gather_input = true;
+        SInput::input_loop_sync.input_gathered = true;
+    }
+    SInput::input_loop_sync.cv.notify_one();
 }

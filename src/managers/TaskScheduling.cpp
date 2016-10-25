@@ -1,3 +1,4 @@
+#include "gemini.h"
 #include "managers/TaskScheduling.h"
 #include "managers/Platform.h"
 
@@ -62,12 +63,12 @@ namespace MTaskScheduling
     {
         for (uint32_t stack = 0; stack < NUM_STACKS; ++stack)
         {
-            s_stacks[stack][0]  = { dont_do_it, (void*)(uint64_t) stack, SCP_NEVER, SCP_NEVER };
+            s_stacks[stack][0]  = { dont_do_it, (void*)(uint64_t) stack, SCP_NONE, SCP_NONE };
         }
 
         for (uint32_t inactive_stack = NUM_ACTIVE_STACKS; inactive_stack < NUM_STACKS; ++inactive_stack)
         {
-            s_iterations[inactive_stack]  = 0x7FFFFFFF;
+            s_iterations[inactive_stack]  = 0x7FFFFFFF; // max int32 because SSE
         }
 
         s_pri_mask_main_stack.store((1<<NUM_ACTIVE_STACKS)-1, std::memory_order_relaxed); // all stacks allowed, main_stack 0
@@ -94,10 +95,7 @@ namespace MTaskScheduling
             uint64_t c;
             uint32_t k = asm_bsr32( ( ((uint32_t) ((ss >> 7) == s_iterations[s].load(std::memory_order_relaxed)) << (s - main_stack) % 32) | 1 ) & m);
             uint32_t next_pri = (k + main_stack) % 32;
-//            uint32_t pm = m;
             m &= ~(1 << k);
-            uint32_t num_cas = 0;
-            uint32_t cas_thread = thread_id;
             do
             {
                 s = next_pri;
@@ -105,27 +103,12 @@ namespace MTaskScheduling
                 ss = s_stack_sizes[s].load(std::memory_order_acquire);
                 task = s_stacks[s][ss & 0x0000007F];
 
-                if (num_cas > 1000000 && cas_thread == thread_id)
-                {
-                    std::cout << thread_id << " " << std::flush;
-                    cas_thread = -1;
-//                    std::cout << "s: " << s << " ss: "  << (ss & 0x0000007F) << " i: " << (ss >> 7) << " pm: " << pm << " main_stack: " << main_stack << std::endl;
-//                    std::cout << "i[0]: " << s_iterations[0].load(std::memory_order_relaxed)
-//                              << " i[1]: " << s_iterations[1].load(std::memory_order_relaxed)
-//                              << " i[2]: " << s_iterations[2].load(std::memory_order_relaxed)
-//                              << " i[3]: " << s_iterations[3].load(std::memory_order_relaxed) << std::endl;
-//                    std::cout << "tcp: " << task.checkpoints_previous_frame << " tcc: " << task.checkpoints_current_frame << std::endl;
-//                    std::cout << "scp[0]: " << s_checkpoints[0].load(std::memory_order_relaxed) << " scp[1]: " << s_checkpoints[1].load(std::memory_order_release) << std::endl;
-//                    exit(1);
-                }
-                ++num_cas;
-
                 uint64_t current_frame = ss >> 7;
                 uint64_t previous_frame = current_frame - 1;
                 uint64_t scp_current_frame = s_checkpoints[current_frame & 1].load(std::memory_order_acquire);
                 uint64_t scp_previous_frame = s_checkpoints[previous_frame & 1].load(std::memory_order_acquire);
-                c = ( task.checkpoints_current_frame - ((scp_current_frame ^ (((current_frame >> 1) & 1) - 1)) & task.checkpoints_current_frame) ) |
-                    ( task.checkpoints_previous_frame - ((scp_previous_frame ^ (((previous_frame >> 1) & 1) - 1)) & task.checkpoints_previous_frame) );
+                c  = task.checkpoints_current_frame - ((scp_current_frame ^ (((current_frame >> 1) & 1) - 1)) & task.checkpoints_current_frame);
+                c |= task.checkpoints_previous_frame - ((scp_previous_frame ^ (((previous_frame >> 1) & 1) - 1)) & task.checkpoints_previous_frame);
                 c |= (uint64_t) (ss & 0x0000007F) == 0; // this should be handled with dont_do_it tasks
 
                 if (c)
@@ -207,7 +190,7 @@ namespace MTaskScheduling
 
             if (g_total_executed.fetch_add(1, std::memory_order_relaxed) == 10000000)
             {
-                g_quit_request.store(1, std::memory_order_relaxed);
+                signal_shutdown();
             }
 
             prof_sched_start(thread_id);

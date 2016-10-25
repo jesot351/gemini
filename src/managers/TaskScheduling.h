@@ -43,7 +43,6 @@ namespace MTaskScheduling
         SCP_RENDERING2 = ((uint64_t)1<<16),
         SCP_RENDERING3 = ((uint64_t)1<<17),
         SCP_RENDERING4 = ((uint64_t)1<<18),
-        SCP_NEVER      = ((uint64_t)1<<63),
     };
 
     typedef struct
