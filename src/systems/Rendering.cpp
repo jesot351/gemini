@@ -1,13 +1,14 @@
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 #include "systems/Rendering.h"
 #include "managers/TaskScheduling.h"
 #include "managers/Memory.h"
+#include "data/Input.h"
 
 #include <unistd.h> // usleep()
 #include <iostream>
 #include <chrono>
-
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
 
 namespace SRendering
 {
@@ -195,17 +196,13 @@ namespace SRendering
     uint64_t present_task(void* args, uint32_t thread_id)
     {
         static std::chrono::time_point<std::chrono::high_resolution_clock> prev_t;
-        static std::chrono::time_point<std::chrono::high_resolution_clock> prev_present;
         auto t = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::micro> frame_delta = t - prev_t;
-        std::chrono::duration<double, std::micro> present_delta = t - prev_present;
 
-        if (present_delta.count() > 1000000)
+        if (key_pressed(GLFW_KEY_P))
         {
             double ms = frame_delta.count() / 1000.0d;
             std::cout << "frame: " << ms << " ms, " << 1000 / ms << " fps" << std::endl;
-
-            prev_present = t;
         }
 
         prev_t = t;

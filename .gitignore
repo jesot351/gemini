@@ -10,6 +10,7 @@
 !src/
 !src/systems
 !src/managers
+!src/data
 !debug/
 !debug/debug.css
 !debug/process_debug.py

@@ -58,7 +58,6 @@ namespace MTaskScheduling
     extern ALIGN(64) std::atomic<uint32_t> s_iterations[NUM_STACKS];
     extern std::atomic<uint32_t>           g_quit_request;
     extern std::atomic<uint32_t>           g_total_executed;
-    extern uint32_t                        g_frame;
 
     void init_scheduler();
     void worker_thread(uint32_t);

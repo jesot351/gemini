@@ -27,7 +27,6 @@ namespace MTaskScheduling
     std::atomic<uint64_t>           s_checkpoints[2];
     std::atomic<uint32_t>           g_quit_request;
     std::atomic<uint32_t>           g_total_executed;
-    uint32_t                        g_frame;
 
 #if PROFILING
     typedef struct

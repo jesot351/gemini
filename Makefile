@@ -3,7 +3,9 @@ INC_DIR=src
 VULKAN_SDK_PATH=/home/jesper/Documents/VulkanSDK/1.0.30.0/x86_64
 
 EXEC=gemini
-SRCS=$(SRC_DIR)/$(EXEC).cpp $(wildcard $(SRC_DIR)/systems/*.cpp) $(wildcard $(SRC_DIR)/managers/*.cpp)
+SRCS=$(SRC_DIR)/$(EXEC).cpp $(wildcard $(SRC_DIR)/systems/*.cpp) \
+	$(wildcard $(SRC_DIR)/managers/*.cpp) \
+	$(wildcard $(SRC_DIR)/data/*.cpp)
 OBJS=$(SRCS:.cpp=.o)
 
 CC=g++

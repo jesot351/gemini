@@ -6,7 +6,7 @@
 #include <mutex>
 #include <condition_variable>
 
-struct GLFWwindow;
+#include <GLFW/glfw3.h>
 
 namespace SInput
 {
@@ -22,6 +22,7 @@ namespace SInput
 
     void init_input(uint32_t);
     void input_loop(GLFWwindow*);
+    void key_callback(GLFWwindow*, int, int, int, int);
 
     uint64_t submit_tasks(void*, uint32_t);
     uint64_t input_task(void*, uint32_t);

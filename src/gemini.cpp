@@ -68,7 +68,7 @@ void signal_shutdown()
     // signal task scheduling manager
     MTaskScheduling::g_quit_request.store(1, std::memory_order_relaxed);
 
-    // signal input loop
+    // signal input handling
     {
         std::unique_lock<std::mutex> l(SInput::input_loop_sync.m);
         SInput::input_loop_sync.gather_input = true;
