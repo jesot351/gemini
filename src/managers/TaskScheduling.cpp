@@ -77,7 +77,7 @@ namespace MTaskScheduling
 
     void worker_thread(uint32_t thread_id)
     {
-        timepoint_to_double(std::chrono::high_resolution_clock::now());
+        timestamp();
         prof_sched_start(thread_id);
 
         uint32_t s = 0;
@@ -215,7 +215,7 @@ namespace MTaskScheduling
     {
 #if PROFILING
         uint32_t i = profiling_i[thread_id] % PROFILING_SIZE;
-        profiling_log[thread_id][i].sched_start = timepoint_to_double(std::chrono::high_resolution_clock::now());
+        profiling_log[thread_id][i].sched_start = timestamp();
         rdtscp_ss[thread_id] = asm_rdtscp();
 #endif
     }
@@ -226,7 +226,7 @@ namespace MTaskScheduling
         uint64_t rdtscp_se = asm_rdtscp();
         uint32_t i = profiling_i[thread_id] % PROFILING_SIZE;
         profiling_log[thread_id][i].rdtscp_sched = rdtscp_se - rdtscp_ss[thread_id];
-        profiling_log[thread_id][i].sched_end = timepoint_to_double(std::chrono::high_resolution_clock::now());
+        profiling_log[thread_id][i].sched_end = timestamp();
         profiling_log[thread_id][i].checkpoints_previous_frame = task->checkpoints_previous_frame;
         profiling_log[thread_id][i].checkpoints_current_frame = task->checkpoints_current_frame;
         profiling_log[thread_id][i].stack = stack;
@@ -240,7 +240,7 @@ namespace MTaskScheduling
         uint64_t rdtscp_ee = asm_rdtscp();
         uint32_t i = profiling_i[thread_id] % PROFILING_SIZE;
         profiling_log[thread_id][i].rdtscp_exec = rdtscp_ee - rdtscp_es[thread_id];
-        profiling_log[thread_id][i].exec_end = timepoint_to_double(std::chrono::high_resolution_clock::now());
+        profiling_log[thread_id][i].exec_end = timestamp();
         ++profiling_i[thread_id];
 #endif
     }
@@ -273,9 +273,10 @@ namespace MTaskScheduling
 #endif
     }
 
-    double timepoint_to_double(std::chrono::time_point<std::chrono::high_resolution_clock> now)
+    double timestamp()
     {
         static auto start = std::chrono::high_resolution_clock::now();
+        auto now = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> diff = now - start;
 
         return diff.count();
