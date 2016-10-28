@@ -211,7 +211,7 @@ namespace MTaskScheduling
 
 
     // profiling functions
-    void prof_sched_start(uint32_t thread_id)
+    inline void prof_sched_start(uint32_t thread_id)
     {
 #if PROFILING
         uint32_t i = profiling_i[thread_id] % PROFILING_SIZE;
@@ -220,7 +220,7 @@ namespace MTaskScheduling
 #endif
     }
 
-    void prof_sched_end_exec_start(uint32_t thread_id, uint32_t stack, task_t* task)
+    inline void prof_sched_end_exec_start(uint32_t thread_id, uint32_t stack, task_t* task)
     {
 #if PROFILING
         uint64_t rdtscp_se = asm_rdtscp();
@@ -234,7 +234,7 @@ namespace MTaskScheduling
 #endif
     }
 
-    void prof_exec_end(uint32_t thread_id)
+    inline void prof_exec_end(uint32_t thread_id)
     {
 #if PROFILING
         uint64_t rdtscp_ee = asm_rdtscp();
@@ -273,7 +273,7 @@ namespace MTaskScheduling
 #endif
     }
 
-    double timestamp()
+    inline double timestamp()
     {
         static auto start = std::chrono::high_resolution_clock::now();
         auto now = std::chrono::high_resolution_clock::now();
