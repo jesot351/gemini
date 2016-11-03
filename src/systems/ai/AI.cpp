@@ -1,4 +1,4 @@
-#include "systems/AI.h"
+#include "systems/ai/AI.h"
 #include "managers/TaskScheduling.h"
 #include "managers/Memory.h"
 

@@ -1,7 +1,5 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
-#include "systems/Rendering.h"
+#include "systems/rendering/Rendering.h"
+#include "systems/rendering/Vulkan.h"
 #include "managers/TaskScheduling.h"
 #include "managers/Memory.h"
 #include "data/Input.h"
@@ -10,21 +8,26 @@
 #include <iostream>
 #include <chrono>
 
+struct GLFWwindow;
+
 namespace SRendering
 {
     uint32_t system_id;
     MMemory::LinearAllocator32kb task_args_memory;
 
-    void init_rendering(uint32_t assigned_system_id)
+    void init_rendering(uint32_t assigned_system_id, GLFWwindow* window)
     {
         system_id = assigned_system_id;
 
-        uint32_t extensionCount = 0;
-        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-        std::cout << extensionCount << " extensions supported" << std::endl;
+        init_vulkan(window);
 
         task_args_memory.Init();
         submit_tasks(nullptr, 0);
+    }
+
+    void clear_rendering()
+    {
+        clear_vulkan();
     }
 
     std::atomic<uint32_t> num_executed_group1;
@@ -206,6 +209,8 @@ namespace SRendering
         }
 
         prev_t = t;
+
+        draw_frame();
 
         return MTaskScheduling::SCP_RENDERING4;
     }

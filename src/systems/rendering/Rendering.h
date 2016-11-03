@@ -4,12 +4,15 @@
 
 #include <atomic>
 
+struct GLFWwindow;
+
 namespace SRendering
 {
     extern uint32_t system_id;
     extern MMemory::LinearAllocator32kb task_args_memory;
 
-    void init_rendering(uint32_t);
+    void init_rendering(uint32_t, GLFWwindow*);
+    void clear_rendering();
 
     uint64_t submit_tasks(void*, uint32_t);
 

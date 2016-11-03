@@ -1,10 +1,11 @@
+#include "gemini.h"
 #include "managers/Memory.h"
 #include "managers/TaskScheduling.h"
-#include "systems/Input.h"
-#include "systems/Physics.h"
-#include "systems/Animation.h"
-#include "systems/AI.h"
-#include "systems/Rendering.h"
+#include "systems/input/Input.h"
+#include "systems/physics/Physics.h"
+#include "systems/animation/Animation.h"
+#include "systems/ai/AI.h"
+#include "systems/rendering/Rendering.h"
 
 #include <iostream>
 #include <thread>
@@ -21,14 +22,15 @@ int main()
     // Initialize window
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(800, 600, "gemini", nullptr, nullptr);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "gemini", nullptr, nullptr);
 
     // Initialize systems
     SInput::init_input(0);
     SPhysics::init_physics(1);
     SAnimation::init_animation(2);
     SAI::init_ai(3);
-    SRendering::init_rendering(4);
+    SRendering::init_rendering(4, window);
 
     // Launch worker threads
     uint32_t num_threads = MTaskScheduling::NUM_WORKER_THREADS;
@@ -54,6 +56,7 @@ int main()
     std::cout << "total executed: " << MTaskScheduling::g_total_executed.load(std::memory_order_relaxed) << "\n";
 
     // Clear resources
+    SRendering::clear_rendering();
     MMemory::clear_memory();
 
     // Destroy window

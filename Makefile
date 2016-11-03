@@ -3,7 +3,7 @@ INC_DIR=src
 VULKAN_SDK_PATH=/home/jesper/Documents/VulkanSDK/1.0.30.0/x86_64
 
 EXEC=gemini
-SRCS=$(SRC_DIR)/$(EXEC).cpp $(wildcard $(SRC_DIR)/systems/*.cpp) \
+SRCS=$(SRC_DIR)/$(EXEC).cpp $(wildcard $(SRC_DIR)/systems/*/*.cpp) \
 	$(wildcard $(SRC_DIR)/managers/*.cpp) \
 	$(wildcard $(SRC_DIR)/data/*.cpp)
 OBJS=$(SRCS:.cpp=.o)
@@ -20,6 +20,10 @@ $(EXEC): $(OBJS)
 
 %.o: %.cpp
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+shaders:
+	$(VULKAN_SDK_PATH)/bin/glslangValidator -V res/shaders/shader.vert
+	$(VULKAN_SDK_PATH)/bin/glslangValidator -V res/shaders/shader.frag
 
 clean:
 	rm -f $(EXEC) $(OBJS) *~

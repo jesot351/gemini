@@ -1,5 +1,5 @@
 #include "gemini.h"
-#include "systems/Input.h"
+#include "systems/input/Input.h"
 #include "managers/TaskScheduling.h"
 #include "managers/Memory.h"
 #include "managers/Platform.h"
