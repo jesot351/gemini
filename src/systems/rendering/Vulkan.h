@@ -2,15 +2,44 @@
 
 #include <stdint.h>
 #include <vector>
+#include <array>
+
 #include <vulkan/vulkan.h>
+#include <glm/glm.hpp>
 
 struct GLFWwindow;
 
 namespace SRendering
 {
-    extern VkInstance instance;
-    extern VkDebugReportCallbackEXT callback;
-    extern VkPhysicalDevice physical_device;
+    typedef struct vertex_t {
+        glm::vec2 position;
+        glm::vec3 color;
+
+        static VkVertexInputBindingDescription get_binding_description()
+        {
+            VkVertexInputBindingDescription binding_description = {};
+            binding_description.binding = 0;
+            binding_description.stride = sizeof(vertex_t);
+            binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+            return binding_description;
+        }
+
+        static std::array<VkVertexInputAttributeDescription, 2> get_attribute_descriptions()
+        {
+            std::array<VkVertexInputAttributeDescription, 2> attribute_descriptions = {};
+            attribute_descriptions[0].binding = 0;
+            attribute_descriptions[0].location = 0;
+            attribute_descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+            attribute_descriptions[0].offset = offsetof(vertex_t, position);
+            attribute_descriptions[1].binding = 0;
+            attribute_descriptions[1].location = 1;
+            attribute_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+            attribute_descriptions[1].offset = offsetof(vertex_t, color);
+
+            return attribute_descriptions;
+        }
+    } vertex_t;
 
     typedef struct queue_family_indices_t
     {
@@ -69,6 +98,13 @@ namespace SRendering
 
     void create_command_pool();
     void create_command_buffers();
+
+    void create_buffer(VkDeviceSize, VkBufferUsageFlags,
+                       VkMemoryPropertyFlags, VkBuffer*, VkDeviceMemory*);
+    void copy_buffer(VkBuffer, VkBuffer, VkDeviceSize);
+    void create_vertex_buffer();
+    void create_index_buffer();
+    uint32_t find_memory_type(uint32_t, VkMemoryPropertyFlags);
 
     void create_semaphores();
 
