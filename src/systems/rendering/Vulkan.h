@@ -41,6 +41,13 @@ namespace SRendering
         }
     } vertex_t;
 
+    typedef struct ubo_transforms_t
+    {
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::mat4 projection;
+    } ubo_transforms_t;
+
     typedef struct queue_family_indices_t
     {
         int32_t graphics = -1;
@@ -104,9 +111,15 @@ namespace SRendering
     void copy_buffer(VkBuffer, VkBuffer, VkDeviceSize);
     void create_vertex_buffer();
     void create_index_buffer();
+    void create_uniform_buffer();
     uint32_t find_memory_type(uint32_t, VkMemoryPropertyFlags);
+
+    void create_descriptor_set_layout();
+    void create_descriptor_pool();
+    void create_descriptor_set();
 
     void create_semaphores();
 
     void draw_frame();
+    void update_transforms(float);
 }

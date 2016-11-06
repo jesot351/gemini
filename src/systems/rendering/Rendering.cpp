@@ -210,6 +210,7 @@ namespace SRendering
 
         prev_t = t;
 
+        update_transforms((float) frame_delta.count());
         draw_frame();
 
         return MTaskScheduling::SCP_RENDERING4;

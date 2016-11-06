@@ -8,10 +8,13 @@
 #include <set>
 #include <limits>
 #include <cstring>
+#include <chrono>
 
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 
 namespace SRendering
@@ -34,8 +37,12 @@ namespace SRendering
     std::vector<VkFramebuffer> swapchain_framebuffers;
 
     VkRenderPass render_pass;
+    VkDescriptorSetLayout descriptor_set_layout;
     VkPipelineLayout pipeline_layout;
     VkPipeline graphics_pipeline;
+
+    VkDescriptorPool descriptor_pool;
+    VkDescriptorSet descriptor_set;
 
     VkCommandPool command_pool;
     std::vector<VkCommandBuffer> command_buffers;
@@ -44,6 +51,8 @@ namespace SRendering
     VkBuffer vertex_buffer;
     VkDeviceMemory index_buffer_memory;
     VkBuffer index_buffer;
+    VkDeviceMemory uniform_buffer_memory;
+    VkBuffer uniform_buffer;
 
     VkSemaphore image_available_semaphore;
     VkSemaphore render_finished_semaphore;
@@ -79,11 +88,15 @@ namespace SRendering
         create_swapchain();
         create_image_views();
         create_render_pass();
+        create_descriptor_set_layout();
         create_graphics_pipeline();
         create_framebuffers();
         create_command_pool();
         create_vertex_buffer();
         create_index_buffer();
+        create_uniform_buffer();
+        create_descriptor_pool();
+        create_descriptor_set();
         create_command_buffers();
         create_semaphores();
     }
@@ -486,6 +499,24 @@ namespace SRendering
         assert(result == VK_SUCCESS);
     }
 
+    void create_descriptor_set_layout()
+    {
+        VkDescriptorSetLayoutBinding ubo_binding = {};
+        ubo_binding.binding = 0;
+        ubo_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        ubo_binding.descriptorCount = 1;
+        ubo_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        ubo_binding.pImmutableSamplers = nullptr;
+
+        VkDescriptorSetLayoutCreateInfo layout_info = {};
+        layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layout_info.bindingCount = 1;
+        layout_info.pBindings = &ubo_binding;
+
+        VkResult result = vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &descriptor_set_layout);
+        assert(result == VK_SUCCESS);
+    }
+
     void create_graphics_pipeline()
     {
         // shader stages
@@ -553,7 +584,7 @@ namespace SRendering
         rasterizer_info.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer_info.lineWidth = 1.0f;
         rasterizer_info.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer_info.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer_info.depthBiasEnable = VK_FALSE;
         rasterizer_info.depthBiasConstantFactor = 0.0f;
         rasterizer_info.depthBiasClamp = 0.0f;
@@ -593,10 +624,11 @@ namespace SRendering
         blend_info.blendConstants[2] = 0.0f;
         blend_info.blendConstants[3] = 0.0f;
 
+        VkDescriptorSetLayout set_layouts[] = { descriptor_set_layout };
         VkPipelineLayoutCreateInfo layout_info = {};
         layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        layout_info.setLayoutCount = 0;
-        layout_info.pSetLayouts = nullptr;
+        layout_info.setLayoutCount = 1;
+        layout_info.pSetLayouts = set_layouts;
         layout_info.pushConstantRangeCount = 0;
         layout_info.pPushConstantRanges = nullptr;
 
@@ -729,6 +761,9 @@ namespace SRendering
 
             vkCmdBindIndexBuffer(command_buffers[i], index_buffer, 0, VK_INDEX_TYPE_UINT32);
 
+            vkCmdBindDescriptorSets(command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
+
             vkCmdDrawIndexed(command_buffers[i], num_indices, 1, 0, 0, 0);
 
             vkCmdEndRenderPass(command_buffers[i]);
@@ -786,6 +821,61 @@ namespace SRendering
 
         vkDestroyBuffer(device, staging_buffer, nullptr);
         vkFreeMemory(device, staging_buffer_memory, nullptr);
+    }
+
+    void create_uniform_buffer()
+    {
+        VkDeviceSize buffer_size = sizeof(ubo_transforms_t);
+        create_buffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                      &uniform_buffer, &uniform_buffer_memory);
+    }
+
+    void create_descriptor_pool()
+    {
+        VkDescriptorPoolSize pool_size = {};
+        pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        pool_size.descriptorCount = 1;
+
+        VkDescriptorPoolCreateInfo pool_info = {};
+        pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pool_info.poolSizeCount = 1;
+        pool_info.pPoolSizes = &pool_size;
+        pool_info.maxSets = 1;
+
+        VkResult result = vkCreateDescriptorPool(device, &pool_info, nullptr, &descriptor_pool);
+        assert(result == VK_SUCCESS);
+    }
+
+    void create_descriptor_set()
+    {
+        VkDescriptorSetLayout layouts[] = { descriptor_set_layout };
+        VkDescriptorSetAllocateInfo alloc_info = {};
+        alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        alloc_info.descriptorPool = descriptor_pool;
+        alloc_info.descriptorSetCount = 1;
+        alloc_info.pSetLayouts = layouts;
+
+        VkResult result = vkAllocateDescriptorSets(device, &alloc_info, &descriptor_set);
+        assert(result == VK_SUCCESS);
+
+        VkDescriptorBufferInfo buffer_info = {};
+        buffer_info.buffer = uniform_buffer;
+        buffer_info.offset = 0;
+        buffer_info.range = sizeof(ubo_transforms_t);
+
+        VkWriteDescriptorSet descriptor_write = {};
+        descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_write.dstSet = descriptor_set;
+        descriptor_write.dstBinding = 0;
+        descriptor_write.dstArrayElement = 0;
+        descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptor_write.descriptorCount = 1;
+        descriptor_write.pBufferInfo = &buffer_info;
+        descriptor_write.pImageInfo = nullptr;
+        descriptor_write.pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(device, 1, &descriptor_write, 0, nullptr);
     }
 
     void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
@@ -913,6 +1003,29 @@ namespace SRendering
         vkQueuePresentKHR(present_queue, &present_info);
     }
 
+    void update_transforms(float frame_delta_ms)
+    {
+        static glm::mat4 prev_rotation = glm::mat4();
+
+        ubo_transforms_t transforms = {};
+        transforms.model = glm::rotate(prev_rotation,
+                                       frame_delta_ms / 1e6f * glm::radians(90.0f),
+                                       glm::vec3(0.0f, 0.0f, 1.0f));
+        prev_rotation = transforms.model;
+        transforms.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f),
+                                      glm::vec3(0.0f, 0.0f, 0.0f),
+                                      glm::vec3(0.0f, 0.0f, 1.0f));
+        transforms.projection = glm::perspective(glm::radians(45.0f),
+                                                 swapchain_extent.width / (float) swapchain_extent.height,
+                                                 0.1f, 10.0f);
+        transforms.projection[1][1] *= -1;
+
+        void* data;
+        vkMapMemory(device, uniform_buffer_memory, 0, sizeof(transforms), 0, &data);
+        memcpy(data, &transforms, sizeof(transforms));
+        vkUnmapMemory(device, uniform_buffer_memory);
+    }
+
     void clear_vulkan()
     {
         vkDeviceWaitIdle(device);
@@ -924,12 +1037,16 @@ namespace SRendering
         vkFreeMemory(device, vertex_buffer_memory, nullptr);
         vkDestroyBuffer(device, index_buffer, nullptr);
         vkFreeMemory(device, index_buffer_memory, nullptr);
+        vkDestroyBuffer(device, uniform_buffer, nullptr);
+        vkFreeMemory(device, uniform_buffer_memory, nullptr);
+
+        vkDestroyDescriptorPool(device, descriptor_pool, nullptr);
 
         vkDestroyCommandPool(device, command_pool, nullptr);
 
         vkDestroyPipeline(device, graphics_pipeline, nullptr);
-
         vkDestroyPipelineLayout(device, pipeline_layout, nullptr);
+        vkDestroyDescriptorSetLayout(device, descriptor_set_layout, nullptr);
 
         vkDestroyRenderPass(device, render_pass, nullptr);
 
