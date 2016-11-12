@@ -24,6 +24,7 @@ $(EXEC): $(OBJS)
 shaders:
 	$(VULKAN_SDK_PATH)/bin/glslangValidator -V res/shaders/shader.vert
 	$(VULKAN_SDK_PATH)/bin/glslangValidator -V res/shaders/shader.frag
+	$(VULKAN_SDK_PATH)/bin/glslangValidator -V res/shaders/shader.comp
 
 clean:
 	rm -f $(EXEC) $(OBJS) *~

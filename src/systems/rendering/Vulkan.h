@@ -11,6 +11,8 @@ struct GLFWwindow;
 
 namespace SRendering
 {
+//    const uint64_t UINT64_MAX = std::numeric_limits<uint64_t>::max();
+
     typedef struct vertex_t {
         glm::vec2 position;
         glm::vec3 color;
@@ -48,17 +50,6 @@ namespace SRendering
         glm::mat4 projection;
     } ubo_transforms_t;
 
-    typedef struct queue_family_indices_t
-    {
-        int32_t graphics = -1;
-        int32_t present = -1;
-
-        bool is_complete()
-        {
-            return graphics >= 0 && present >= 0;
-        }
-    } queue_family_indices_t;
-
     typedef struct swapchain_support_details_t
     {
         VkSurfaceCapabilitiesKHR capabilities;
@@ -85,8 +76,7 @@ namespace SRendering
     void create_surface(GLFWwindow*);
 
     void pick_physical_device();
-    bool is_device_suitable(VkPhysicalDevice);
-    queue_family_indices_t find_queue_families(VkPhysicalDevice);
+    bool find_queue_family_indices(VkPhysicalDevice, uint32_t*, uint32_t*, uint32_t*);
     bool check_device_extension_support(VkPhysicalDevice);
 
     void create_logical_device();
@@ -96,30 +86,39 @@ namespace SRendering
     VkSurfaceFormatKHR choose_swap_surface_format(const std::vector<VkSurfaceFormatKHR>*);
     VkPresentModeKHR choose_swap_present_mode(const std::vector<VkPresentModeKHR>*);
     VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR*);
-    void create_image_views();
-    void create_framebuffers();
 
     void create_render_pass();
+    void create_gbuffer();
+
+    void create_graphics_descriptor_set_layouts();
     void create_graphics_pipeline();
-    void create_shader_module_from_file(const char*, VkShaderModule*);
+    void create_graphics_descriptor_pool();
+    void create_graphics_descriptor_sets();
 
-    void create_command_pool();
-    void create_command_buffers();
+    void create_compute_descriptor_set_layouts();
+    void create_compute_pipeline();
+    void create_compute_descriptor_pool();
+    void create_compute_descriptor_sets();
 
-    void create_buffer(VkDeviceSize, VkBufferUsageFlags,
-                       VkMemoryPropertyFlags, VkBuffer*, VkDeviceMemory*);
-    void copy_buffer(VkBuffer, VkBuffer, VkDeviceSize);
+    void create_graphics_command_pool();
+    void create_graphics_command_buffers();
+
+    void create_compute_command_pool();
+    void create_compute_command_buffers();
+
     void create_vertex_buffer();
     void create_index_buffer();
     void create_uniform_buffer();
-    uint32_t find_memory_type(uint32_t, VkMemoryPropertyFlags);
 
-    void create_descriptor_set_layout();
-    void create_descriptor_pool();
-    void create_descriptor_set();
-
-    void create_semaphores();
+    void create_sync_primitives();
 
     void draw_frame();
     void update_transforms(float);
+
+    // utils
+    uint32_t find_memory_type(uint32_t, VkMemoryPropertyFlags);
+    void create_shader_module_from_file(const char*, VkShaderModule*);
+    void create_buffer(VkDeviceSize, VkBufferUsageFlags,
+                       VkMemoryPropertyFlags, VkBuffer*, VkDeviceMemory*);
+    void copy_buffer(VkBuffer, VkBuffer, VkDeviceSize);
 }
