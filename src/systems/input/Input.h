@@ -18,6 +18,7 @@ namespace SInput
         std::condition_variable cv;
         bool gather_input = false;
         bool input_gathered = false;
+        bool quit_request = false;
     } extern input_loop_sync;
 
     void init_input(uint32_t);

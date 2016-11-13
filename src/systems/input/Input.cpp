@@ -32,11 +32,15 @@ namespace SInput
     {
         glfwSetKeyCallback(window, key_callback);
 
-        while (!MTaskScheduling::g_quit_request.load(std::memory_order_relaxed))
+        for (;;)
         {
             // wait for notification
             std::unique_lock<std::mutex> l(input_loop_sync.m);
             input_loop_sync.cv.wait(l, []{ return input_loop_sync.gather_input; });
+            if (input_loop_sync.quit_request)
+            {
+                break;
+            }
             input_loop_sync.gather_input = false;
 
             // clear input structures
@@ -103,6 +107,12 @@ namespace SInput
         // notify input loop
         {
             std::unique_lock<std::mutex> l(input_loop_sync.m);
+
+            if (input_loop_sync.quit_request)
+            {
+                return MTaskScheduling::SCP_INPUT1;
+            }
+
             input_loop_sync.gather_input = true;
             input_loop_sync.input_gathered = false;
         }

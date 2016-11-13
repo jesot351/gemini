@@ -76,6 +76,7 @@ void signal_shutdown()
         std::unique_lock<std::mutex> l(SInput::input_loop_sync.m);
         SInput::input_loop_sync.gather_input = true;
         SInput::input_loop_sync.input_gathered = true;
+        SInput::input_loop_sync.quit_request = true;
     }
     SInput::input_loop_sync.cv.notify_one();
 }
