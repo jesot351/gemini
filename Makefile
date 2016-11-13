@@ -15,6 +15,9 @@ INCLUDES=-I$(INC_DIR) -I$(VULKAN_SDK_PATH)/include
 
 all: $(EXEC)
 
+test:
+	LD_LIBRARY_PATH=$(VULKAN_SDK_PATH)/lib VK_LAYER_PATH=$(VULKAN_SDK_PATH)/etc/explicit_layer.d ./$(EXEC)
+
 $(EXEC): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(SRCS) $(INCLUDES) $(LDFLAGS)
 

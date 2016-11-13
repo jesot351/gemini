@@ -37,6 +37,7 @@ namespace SRendering
         VkDeviceMemory image_memory[3];
         VkImageView image_views[3];
         VkFramebuffer framebuffer;
+        VkSampler sampler;
     } gbuffer;
 
     VkCommandPool graphics_command_pool;
@@ -207,6 +208,7 @@ namespace SRendering
     {
         uint32_t num_devices = 0;
         vkEnumeratePhysicalDevices(instance, &num_devices, nullptr);
+        std::cout << "found " << num_devices << " physical devices." << std::endl;
         assert(num_devices != 0);
         std::vector<VkPhysicalDevice> devices(num_devices);
         vkEnumeratePhysicalDevices(instance, &num_devices, devices.data());
@@ -223,7 +225,11 @@ namespace SRendering
                 has_adequate_swapchain = !details.formats.empty() && !details.present_modes.empty();
             }
 
-            if (has_all_queues && supports_all_extensions && has_adequate_swapchain)
+            VkPhysicalDeviceProperties device_properties;
+            vkGetPhysicalDeviceProperties(device, &device_properties);
+            bool is_dedicated_gpu = device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+
+            if (has_all_queues && supports_all_extensions && has_adequate_swapchain && is_dedicated_gpu)
             {
                 physical_device = device;
                 graphics_queue_index = graphics;
@@ -470,6 +476,7 @@ namespace SRendering
 
         for (const VkSurfaceFormatKHR& available_format : *available_formats)
         {
+            std::cout << "available swap format: " << available_format.format << std::endl;
             if (available_format.format == VK_FORMAT_R8G8B8A8_UNORM &&
                 available_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             {
@@ -667,6 +674,27 @@ namespace SRendering
 
         result = vkCreateFramebuffer(device, &framebuffer_info, nullptr, &gbuffer.framebuffer);
         assert(result == VK_SUCCESS);
+
+        VkSamplerCreateInfo sampler_info = {};
+        sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        sampler_info.minFilter = VK_FILTER_NEAREST;
+        sampler_info.magFilter = VK_FILTER_NEAREST;
+        sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        sampler_info.anisotropyEnable = VK_FALSE;
+        sampler_info.maxAnisotropy = 0;
+        sampler_info.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+        sampler_info.unnormalizedCoordinates = VK_TRUE;
+        sampler_info.compareEnable = VK_FALSE;
+        sampler_info.compareOp = VK_COMPARE_OP_ALWAYS;
+        sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        sampler_info.mipLodBias = 0.0f;
+        sampler_info.minLod = 0.0f;
+        sampler_info.maxLod = 0.0f;
+
+        result = vkCreateSampler(device, &sampler_info, nullptr, &gbuffer.sampler);
+        assert(result == VK_SUCCESS);
     }
 
     void create_graphics_descriptor_set_layouts()
@@ -769,25 +797,28 @@ namespace SRendering
         multisampling_info.alphaToCoverageEnable = VK_FALSE;
         multisampling_info.alphaToOneEnable = VK_FALSE;
 
-        VkPipelineColorBlendAttachmentState blend_attachment_info = {};
-        blend_attachment_info.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-            VK_COLOR_COMPONENT_G_BIT |
-            VK_COLOR_COMPONENT_B_BIT |
-            VK_COLOR_COMPONENT_A_BIT;
-        blend_attachment_info.blendEnable = VK_FALSE;
-        blend_attachment_info.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        blend_attachment_info.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-        blend_attachment_info.colorBlendOp = VK_BLEND_OP_ADD;
-        blend_attachment_info.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        blend_attachment_info.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        blend_attachment_info.alphaBlendOp = VK_BLEND_OP_ADD;
+        VkPipelineColorBlendAttachmentState blend_attachment_infos[3] = {};
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            blend_attachment_infos[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                VK_COLOR_COMPONENT_G_BIT |
+                VK_COLOR_COMPONENT_B_BIT |
+                VK_COLOR_COMPONENT_A_BIT;
+            blend_attachment_infos[i].blendEnable = VK_FALSE;
+            blend_attachment_infos[i].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+            blend_attachment_infos[i].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+            blend_attachment_infos[i].colorBlendOp = VK_BLEND_OP_ADD;
+            blend_attachment_infos[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            blend_attachment_infos[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            blend_attachment_infos[i].alphaBlendOp = VK_BLEND_OP_ADD;
+        }
 
         VkPipelineColorBlendStateCreateInfo blend_info = {};
         blend_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         blend_info.logicOpEnable = VK_FALSE;
         blend_info.logicOp = VK_LOGIC_OP_COPY;
-        blend_info.attachmentCount = 1;
-        blend_info.pAttachments = &blend_attachment_info;
+        blend_info.attachmentCount = 3;
+        blend_info.pAttachments = blend_attachment_infos;
         blend_info.blendConstants[0] = 0.0f;
         blend_info.blendConstants[1] = 0.0f;
         blend_info.blendConstants[2] = 0.0f;
@@ -883,7 +914,7 @@ namespace SRendering
         for (uint32_t i = 0; i < 3; ++i)
         {
             input_bindings[i].binding = i;
-            input_bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            input_bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             input_bindings[i].descriptorCount = 1;
             input_bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         }
@@ -925,7 +956,7 @@ namespace SRendering
         };
         VkPipelineLayoutCreateInfo layout_info = {};
         layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        layout_info.setLayoutCount = 2;//2;
+        layout_info.setLayoutCount = 2;
         layout_info.pSetLayouts = set_layouts;
         layout_info.pushConstantRangeCount = 0;
         layout_info.pPushConstantRanges = nullptr;
@@ -947,7 +978,7 @@ namespace SRendering
     void create_compute_descriptor_pool()
     {
         VkDescriptorPoolSize pool_sizes[2] = {};
-        pool_sizes[0].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        pool_sizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         pool_sizes[0].descriptorCount = 3;
         pool_sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         pool_sizes[1].descriptorCount = (uint32_t) swapchain_images.size();
@@ -983,12 +1014,13 @@ namespace SRendering
         {
             input_image_infos[i].imageView = gbuffer.image_views[i];
             input_image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            input_image_infos[i].sampler = gbuffer.sampler;
 
             input_descriptor_writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             input_descriptor_writes[i].dstSet = compute_input_descriptor_set;
             input_descriptor_writes[i].dstBinding = i;
             input_descriptor_writes[i].dstArrayElement = 0;
-            input_descriptor_writes[i].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            input_descriptor_writes[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             input_descriptor_writes[i].descriptorCount = 1;
             input_descriptor_writes[i].pBufferInfo = nullptr;
             input_descriptor_writes[i].pImageInfo = &input_image_infos[i];
@@ -1384,6 +1416,7 @@ namespace SRendering
             image_available_semaphore
         };
         VkPipelineStageFlags compute_wait_stages[] = {
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
         };
         submit_info.waitSemaphoreCount = 2;
@@ -1470,8 +1503,8 @@ namespace SRendering
         vkDestroyCommandPool(device, compute_command_pool, nullptr);
         vkDestroyCommandPool(device, graphics_command_pool, nullptr);
 
+        vkDestroySampler(device, gbuffer.sampler, nullptr);
         vkDestroyFramebuffer(device, gbuffer.framebuffer, nullptr);
-
         for (uint32_t i = 0; i < 3; ++i)
         {
             vkDestroyImageView(device, gbuffer.image_views[i], nullptr);
