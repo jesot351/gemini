@@ -13,6 +13,7 @@
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -33,9 +34,9 @@ namespace SRendering
     VkExtent2D swapchain_extent;
 
     struct {
-        VkImage images[3];
-        VkDeviceMemory image_memory[3];
-        VkImageView image_views[3];
+        VkImage images[4];
+        VkDeviceMemory image_memory[4];
+        VkImageView image_views[4];
         VkFramebuffer framebuffer;
         VkSampler sampler;
     } gbuffer;
@@ -90,17 +91,23 @@ namespace SRendering
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
-    const uint32_t num_vertices = 4;
+    const uint32_t num_vertices = 8;
     const vertex_t vertices[num_vertices] = {
-        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{0.5f, 0.5f}, {1.0f, 1.0f, 0.0f}},
-        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 0.0f}},
+        {{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
+
+        {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
+        {{-0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}}
     };
 
-    const uint32_t num_indices = 6;
+    const uint32_t num_indices = 12;
     const uint32_t indices[num_indices] = {
-        0, 1, 2, 2, 3, 0
+        0, 1, 2, 2, 3, 0,
+        4, 5, 6, 6, 7, 4
     };
 
     void init_vulkan(GLFWwindow* window)
@@ -521,18 +528,27 @@ namespace SRendering
 
     void create_render_pass()
     {
-        VkAttachmentDescription color_attachments[3] = {};
+        VkAttachmentDescription attachments[4] = {};
         for (uint32_t i = 0; i < 3; ++i)
         {
-            color_attachments[i].format = VK_FORMAT_R16G16B16A16_SFLOAT;
-            color_attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
-            color_attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            color_attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            color_attachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            color_attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            color_attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            color_attachments[i].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            attachments[i].format = VK_FORMAT_R16G16B16A16_SFLOAT;
+            attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+            attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            attachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            attachments[i].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
+
+        attachments[3].format = VK_FORMAT_D32_SFLOAT;
+        attachments[3].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[3].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[3].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[3].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachments[3].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachments[3].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[3].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkAttachmentReference color_attachment_refs[3] = {};
         for (uint32_t i = 0; i < 3; ++i)
@@ -541,10 +557,15 @@ namespace SRendering
             color_attachment_refs[i].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         }
 
+        VkAttachmentReference depth_attachment_ref = {};
+        depth_attachment_ref.attachment = 3;
+        depth_attachment_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
         VkSubpassDescription subpass = {};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 3;
         subpass.pColorAttachments = color_attachment_refs;
+        subpass.pDepthStencilAttachment = &depth_attachment_ref;
 
         VkSubpassDependency dependencies[2] = {};
         dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -565,8 +586,8 @@ namespace SRendering
 
         VkRenderPassCreateInfo render_pass_info = {};
         render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        render_pass_info.attachmentCount = 3;
-        render_pass_info.pAttachments = color_attachments;
+        render_pass_info.attachmentCount = 4;
+        render_pass_info.pAttachments = attachments;
         render_pass_info.subpassCount = 1;
         render_pass_info.pSubpasses = &subpass;
         render_pass_info.dependencyCount = 2;
@@ -618,10 +639,15 @@ namespace SRendering
             assert(result == VK_SUCCESS);
         }
 
+        image_info.format = VK_FORMAT_D32_SFLOAT;
+        image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+        result = vkCreateImage(device, &image_info, nullptr, &gbuffer.images[3]);
+
         VkMemoryAllocateInfo alloc_info = {};
         alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 
-        for (uint32_t i = 0; i < 3; ++i)
+        for (uint32_t i = 0; i < 4; ++i)
         {
             VkMemoryRequirements memory_requirements;
             vkGetImageMemoryRequirements(device, gbuffer.images[i], &memory_requirements);
@@ -657,16 +683,23 @@ namespace SRendering
             assert(result == VK_SUCCESS);
         }
 
+        view_info.image = gbuffer.images[3];
+        view_info.format = VK_FORMAT_D32_SFLOAT;
+        view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+        result = vkCreateImageView(device, &view_info, nullptr, &gbuffer.image_views[3]);
+
         VkImageView attachments[] = {
             gbuffer.image_views[0],
             gbuffer.image_views[1],
-            gbuffer.image_views[2]
+            gbuffer.image_views[2],
+            gbuffer.image_views[3]
         };
 
         VkFramebufferCreateInfo framebuffer_info = {};
         framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebuffer_info.renderPass = render_pass;
-        framebuffer_info.attachmentCount = 3;
+        framebuffer_info.attachmentCount = 4;
         framebuffer_info.pAttachments = attachments;
         framebuffer_info.width = swapchain_extent.width;
         framebuffer_info.height = swapchain_extent.height;
@@ -797,6 +830,18 @@ namespace SRendering
         multisampling_info.alphaToCoverageEnable = VK_FALSE;
         multisampling_info.alphaToOneEnable = VK_FALSE;
 
+        VkPipelineDepthStencilStateCreateInfo depth_stencil_info = {};
+        depth_stencil_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depth_stencil_info.depthTestEnable = VK_TRUE;
+        depth_stencil_info.depthWriteEnable = VK_TRUE;
+        depth_stencil_info.depthCompareOp = VK_COMPARE_OP_LESS;
+        depth_stencil_info.depthBoundsTestEnable = VK_FALSE;
+        depth_stencil_info.minDepthBounds = 0.0f;
+        depth_stencil_info.maxDepthBounds = 1.0f;
+        depth_stencil_info.stencilTestEnable = VK_FALSE;
+        depth_stencil_info.front = {};
+        depth_stencil_info.back = {};
+
         VkPipelineColorBlendAttachmentState blend_attachment_infos[3] = {};
         for (uint32_t i = 0; i < 3; ++i)
         {
@@ -844,7 +889,7 @@ namespace SRendering
         pipeline_info.pViewportState = &viewport_info;
         pipeline_info.pRasterizationState = &rasterizer_info;
         pipeline_info.pMultisampleState = &multisampling_info;
-        pipeline_info.pDepthStencilState = nullptr;
+        pipeline_info.pDepthStencilState = &depth_stencil_info;
         pipeline_info.pColorBlendState = &blend_info;
         pipeline_info.pDynamicState = nullptr;
         pipeline_info.layout = graphics_pipeline_layout;
@@ -909,9 +954,9 @@ namespace SRendering
 
     void create_compute_descriptor_set_layouts()
     {
-        VkDescriptorSetLayoutBinding input_bindings[3] = {};
+        VkDescriptorSetLayoutBinding input_bindings[4] = {};
 
-        for (uint32_t i = 0; i < 3; ++i)
+        for (uint32_t i = 0; i < 4; ++i)
         {
             input_bindings[i].binding = i;
             input_bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -921,7 +966,7 @@ namespace SRendering
 
         VkDescriptorSetLayoutCreateInfo layout_info = {};
         layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layout_info.bindingCount = 3;
+        layout_info.bindingCount = 4;
         layout_info.pBindings = input_bindings;
 
         VkResult result = vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &compute_input_descriptor_set_layout);
@@ -979,7 +1024,7 @@ namespace SRendering
     {
         VkDescriptorPoolSize pool_sizes[2] = {};
         pool_sizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        pool_sizes[0].descriptorCount = 3;
+        pool_sizes[0].descriptorCount = 4;
         pool_sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         pool_sizes[1].descriptorCount = (uint32_t) swapchain_images.size();
 
@@ -1008,9 +1053,9 @@ namespace SRendering
         VkResult result = vkAllocateDescriptorSets(device, &alloc_info, &compute_input_descriptor_set);
         assert(result == VK_SUCCESS);
 
-        VkDescriptorImageInfo input_image_infos[3] = {};
-        VkWriteDescriptorSet input_descriptor_writes[3] = {};
-        for (uint32_t i = 0; i < 3; ++i)
+        VkDescriptorImageInfo input_image_infos[4] = {};
+        VkWriteDescriptorSet input_descriptor_writes[4] = {};
+        for (uint32_t i = 0; i < 4; ++i)
         {
             input_image_infos[i].imageView = gbuffer.image_views[i];
             input_image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1028,7 +1073,7 @@ namespace SRendering
         }
 
 
-        vkUpdateDescriptorSets(device, 3, input_descriptor_writes, 0, nullptr);
+        vkUpdateDescriptorSets(device, 4, input_descriptor_writes, 0, nullptr);
 
         // shaded output descriptor
         compute_output_descriptor_sets.resize(swapchain_images.size());
@@ -1116,13 +1161,14 @@ namespace SRendering
         render_pass_info.framebuffer = gbuffer.framebuffer;
         render_pass_info.renderArea.offset = {0, 0};
         render_pass_info.renderArea.extent = swapchain_extent;
-        VkClearValue clear_colors[] = {
-            {1.0f, 0.0f, 0.0f, 1.0f},
-            {0.0f, 1.0f, 0.0f, 1.0f},
-            {0.0f, 0.0f, 1.0f, 1.0f}
-        };
-        render_pass_info.clearValueCount = 3;
-        render_pass_info.pClearValues = clear_colors;
+        VkClearValue clear_values[4] = {};
+        clear_values[0].color = {0.0f, 0.2f, 0.4f, 1.0f};
+        clear_values[1].color = {0.0f, 1.0f, 0.0f, 1.0f};
+        clear_values[2].color = {0.0f, 0.0f, 1.0f, 1.0f};
+        clear_values[3].depthStencil = {1.0f, 0};
+
+        render_pass_info.clearValueCount = 4;
+        render_pass_info.pClearValues = clear_values;
 
         vkCmdBeginRenderPass(graphics_command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -1505,7 +1551,7 @@ namespace SRendering
 
         vkDestroySampler(device, gbuffer.sampler, nullptr);
         vkDestroyFramebuffer(device, gbuffer.framebuffer, nullptr);
-        for (uint32_t i = 0; i < 3; ++i)
+        for (uint32_t i = 0; i < 4; ++i)
         {
             vkDestroyImageView(device, gbuffer.image_views[i], nullptr);
             vkDestroyImage(device, gbuffer.images[i], nullptr);

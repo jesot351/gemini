@@ -11,10 +11,8 @@ struct GLFWwindow;
 
 namespace SRendering
 {
-//    const uint64_t UINT64_MAX = std::numeric_limits<uint64_t>::max();
-
     typedef struct vertex_t {
-        glm::vec2 position;
+        glm::vec3 position;
         glm::vec3 color;
 
         static VkVertexInputBindingDescription get_binding_description()
@@ -32,7 +30,7 @@ namespace SRendering
             std::array<VkVertexInputAttributeDescription, 2> attribute_descriptions = {};
             attribute_descriptions[0].binding = 0;
             attribute_descriptions[0].location = 0;
-            attribute_descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+            attribute_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
             attribute_descriptions[0].offset = offsetof(vertex_t, position);
             attribute_descriptions[1].binding = 0;
             attribute_descriptions[1].location = 1;
@@ -52,6 +50,7 @@ namespace SRendering
 
     typedef struct swapchain_support_details_t
     {
+
         VkSurfaceCapabilitiesKHR capabilities;
         std::vector<VkSurfaceFormatKHR> formats;
         std::vector<VkPresentModeKHR> present_modes;
