@@ -17,6 +17,6 @@ void main()
     vec4 normal = texture(gbuffer_normal, ivec2(gl_GlobalInvocationID.xy));
     float depth = texture(gbuffer_depth, ivec2(gl_GlobalInvocationID.xy)).r;
 
-    vec4 final_color = vec4(depth);
+    vec4 final_color = albedo;
     imageStore(output_image, ivec2(gl_GlobalInvocationID.xy), final_color);
 }

@@ -91,23 +91,17 @@ namespace SRendering
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
-    const uint32_t num_vertices = 8;
-    const vertex_t vertices[num_vertices] = {
-        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-        {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 0.0f}},
-        {{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-
-        {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
-        {{-0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}}
+    const uint32_t num_plane_vertices = 4;
+    const vertex_t plane_vertices[num_plane_vertices] = {
+        {{-2.0f, 0.0f, -2.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{2.0f, 0.0f, -2.0f}, {0.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{2.0f, 0.0f, 2.0f}, {0.0f, -1.0f, 0.0f}, {1.0f, 1.0f}},
+        {{-2.0f, 0.0f, 2.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f}}
     };
 
-    const uint32_t num_indices = 12;
-    const uint32_t indices[num_indices] = {
+    const uint32_t num_plane_indices = 6;
+    const uint32_t plane_indices[num_plane_indices] = {
         0, 1, 2, 2, 3, 0,
-        4, 5, 6, 6, 7, 4
     };
 
     void init_vulkan(GLFWwindow* window)
@@ -775,7 +769,7 @@ namespace SRendering
 
         // fixed-function stages
         VkVertexInputBindingDescription binding_description = vertex_t::get_binding_description();
-        std::array<VkVertexInputAttributeDescription, 2> attribute_descriptions = vertex_t::get_attribute_descriptions();
+        std::array<VkVertexInputAttributeDescription, 3> attribute_descriptions = vertex_t::get_attribute_descriptions();
 
         VkPipelineVertexInputStateCreateInfo vertex_input_info = {};
         vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -1163,8 +1157,8 @@ namespace SRendering
         render_pass_info.renderArea.extent = swapchain_extent;
         VkClearValue clear_values[4] = {};
         clear_values[0].color = {0.0f, 0.2f, 0.4f, 1.0f};
-        clear_values[1].color = {0.0f, 1.0f, 0.0f, 1.0f};
-        clear_values[2].color = {0.0f, 0.0f, 1.0f, 1.0f};
+        clear_values[1].color = {0.0f, 0.2f, 0.4f, 1.0f};
+        clear_values[2].color = {0.0f, 0.2f, 0.4f, 1.0f};
         clear_values[3].depthStencil = {1.0f, 0};
 
         render_pass_info.clearValueCount = 4;
@@ -1183,7 +1177,7 @@ namespace SRendering
         vkCmdBindDescriptorSets(graphics_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 graphics_pipeline_layout, 0, 1, &graphics_descriptor_set, 0, nullptr);
 
-        vkCmdDrawIndexed(graphics_command_buffer, num_indices, 1, 0, 0, 0);
+        vkCmdDrawIndexed(graphics_command_buffer, num_plane_indices, 1, 0, 0, 0);
 
         vkCmdEndRenderPass(graphics_command_buffer);
 
@@ -1283,7 +1277,7 @@ namespace SRendering
 
     void create_vertex_buffer()
     {
-        VkDeviceSize buffer_size = sizeof(vertices[0]) * num_vertices;
+        VkDeviceSize buffer_size = sizeof(plane_vertices[0]) * num_plane_vertices;
 
         VkBuffer staging_buffer;
         VkDeviceMemory staging_buffer_memory;
@@ -1293,7 +1287,7 @@ namespace SRendering
 
         void* data;
         vkMapMemory(device, staging_buffer_memory, 0, buffer_size, 0, &data);
-        memcpy(data, vertices, (size_t) buffer_size);
+        memcpy(data, plane_vertices, (size_t) buffer_size);
         vkUnmapMemory(device, staging_buffer_memory);
 
         create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -1308,7 +1302,7 @@ namespace SRendering
 
     void create_index_buffer()
     {
-        VkDeviceSize buffer_size = sizeof(indices[0]) * num_indices;
+        VkDeviceSize buffer_size = sizeof(plane_indices[0]) * num_plane_indices;
 
         VkBuffer staging_buffer;
         VkDeviceMemory staging_buffer_memory;
@@ -1318,7 +1312,7 @@ namespace SRendering
 
         void* data;
         vkMapMemory(device, staging_buffer_memory, 0, buffer_size, 0, &data);
-        memcpy(data, indices, (size_t) buffer_size);
+        memcpy(data, plane_indices, (size_t) buffer_size);
         vkUnmapMemory(device, staging_buffer_memory);
 
         create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -1502,11 +1496,11 @@ namespace SRendering
         ubo_transforms_t transforms = {};
         transforms.model = glm::rotate(prev_rotation,
                                        frame_delta_ms / 1e6f * glm::radians(90.0f),
-                                       glm::vec3(0.0f, 0.0f, 1.0f));
+                                       glm::vec3(0.0f, 1.0f, 0.0f));
         prev_rotation = transforms.model;
-        transforms.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f),
+        transforms.view = glm::lookAt(glm::vec3(-3.0f, -3.0f, -3.0f),
                                       glm::vec3(0.0f, 0.0f, 0.0f),
-                                      glm::vec3(0.0f, 0.0f, 1.0f));
+                                      glm::vec3(0.0f, -1.0f, 0.0f));
         transforms.projection = glm::perspective(glm::radians(45.0f),
                                                  swapchain_extent.width / (float) swapchain_extent.height,
                                                  0.1f, 10.0f);
