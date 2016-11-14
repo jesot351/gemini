@@ -55,6 +55,13 @@ namespace SRendering
         glm::mat4 projection;
     } ubo_transforms_t;
 
+    typedef struct light_t
+    {
+        glm::vec3 position;
+        glm::vec3 color;
+        float attenuation_end;
+    } light_t;
+
     typedef struct swapchain_support_details_t
     {
 
@@ -118,8 +125,11 @@ namespace SRendering
 
     void create_sync_primitives();
 
+    void init_lights();
+
     void draw_frame();
     void update_transforms(float);
+    void update_lights(float);
 
     // utils
     uint32_t find_memory_type(uint32_t, VkMemoryPropertyFlags);

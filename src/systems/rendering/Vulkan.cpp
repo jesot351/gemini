@@ -83,6 +83,13 @@ namespace SRendering
 
     VkFence compute_finished_fence;
 
+    struct {
+        const uint32_t num_lights = 32;
+        VkBuffer storage_buffer;
+        VkDeviceMemory storage_buffer_memory;
+        light_t* data;
+    } lights;
+
     const char* validation_layers[] = {
         "VK_LAYER_LUNARG_standard_validation"
     };
@@ -122,6 +129,8 @@ namespace SRendering
         create_vertex_buffer();
         create_index_buffer();
         create_uniform_buffer();
+
+        init_lights();
 
         create_graphics_descriptor_set_layouts();
         create_graphics_pipeline();
@@ -948,7 +957,7 @@ namespace SRendering
 
     void create_compute_descriptor_set_layouts()
     {
-        VkDescriptorSetLayoutBinding input_bindings[4] = {};
+        VkDescriptorSetLayoutBinding input_bindings[5] = {};
 
         for (uint32_t i = 0; i < 4; ++i)
         {
@@ -958,9 +967,14 @@ namespace SRendering
             input_bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         }
 
+        input_bindings[4].binding = 4;
+        input_bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        input_bindings[4].descriptorCount = 1;
+        input_bindings[4].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
         VkDescriptorSetLayoutCreateInfo layout_info = {};
         layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layout_info.bindingCount = 4;
+        layout_info.bindingCount = 5;
         layout_info.pBindings = input_bindings;
 
         VkResult result = vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &compute_input_descriptor_set_layout);
@@ -1016,15 +1030,17 @@ namespace SRendering
 
     void create_compute_descriptor_pool()
     {
-        VkDescriptorPoolSize pool_sizes[2] = {};
+        VkDescriptorPoolSize pool_sizes[3] = {};
         pool_sizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         pool_sizes[0].descriptorCount = 4;
         pool_sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         pool_sizes[1].descriptorCount = (uint32_t) swapchain_images.size();
+        pool_sizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        pool_sizes[2].descriptorCount = 1;
 
         VkDescriptorPoolCreateInfo pool_info = {};
         pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        pool_info.poolSizeCount = 2;
+        pool_info.poolSizeCount = 3;
         pool_info.pPoolSizes = pool_sizes;
         pool_info.maxSets = swapchain_images.size() + 1;
 
@@ -1048,7 +1064,8 @@ namespace SRendering
         assert(result == VK_SUCCESS);
 
         VkDescriptorImageInfo input_image_infos[4] = {};
-        VkWriteDescriptorSet input_descriptor_writes[4] = {};
+        VkDescriptorBufferInfo input_buffer_info = {};
+        VkWriteDescriptorSet input_descriptor_writes[5] = {};
         for (uint32_t i = 0; i < 4; ++i)
         {
             input_image_infos[i].imageView = gbuffer.image_views[i];
@@ -1066,8 +1083,21 @@ namespace SRendering
             input_descriptor_writes[i].pTexelBufferView = nullptr;
         }
 
+        input_buffer_info.buffer = lights.storage_buffer;
+        input_buffer_info.offset = 0;
+        input_buffer_info.range = sizeof(light_t) * lights.num_lights;
 
-        vkUpdateDescriptorSets(device, 4, input_descriptor_writes, 0, nullptr);
+        input_descriptor_writes[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        input_descriptor_writes[4].dstSet = compute_input_descriptor_set;
+        input_descriptor_writes[4].dstBinding = 4;
+        input_descriptor_writes[4].dstArrayElement = 0;
+        input_descriptor_writes[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        input_descriptor_writes[4].descriptorCount = 1;
+        input_descriptor_writes[4].pBufferInfo = &input_buffer_info;
+        input_descriptor_writes[4].pImageInfo = nullptr;
+        input_descriptor_writes[4].pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(device, 5, input_descriptor_writes, 0, nullptr);
 
         // shaded output descriptor
         compute_output_descriptor_sets.resize(swapchain_images.size());
@@ -1333,6 +1363,31 @@ namespace SRendering
                       &uniform_buffer, &uniform_buffer_memory);
     }
 
+    void init_lights()
+    {
+        lights.data = new light_t[lights.num_lights];
+
+        size_t size = sizeof(light_t) * lights.num_lights;
+        VkDeviceSize buffer_size = size;
+        create_buffer(buffer_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                      &lights.storage_buffer, &lights.storage_buffer_memory);
+
+        for (uint32_t i = 0; i < lights.num_lights; ++i)
+        {
+            lights.data[i] = {
+                {0.0f, 0.0f, 0.0f},
+                {0.0f, 0.0f, 0.0f},
+                1.0f
+            };
+        }
+
+        void* data;
+        vkMapMemory(device, lights.storage_buffer_memory, 0, size, 0, &data);
+        memcpy(data, lights.data, size);
+        vkUnmapMemory(device, lights.storage_buffer_memory);
+    }
+
     void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
                        VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* buffer_memory)
     {
@@ -1512,9 +1567,31 @@ namespace SRendering
         vkUnmapMemory(device, uniform_buffer_memory);
     }
 
+    void update_lights(float frame_delta_ms)
+    {
+        for (uint32_t i = 0; i < lights.num_lights; ++i)
+        {
+            lights.data[i] = {
+                {0.0f, 0.0f, 0.0f},
+                {0.0f, 0.0f, 0.0f},
+                1.0f
+            };
+        }
+
+        size_t size = sizeof(light_t) * lights.num_lights;
+        void* data;
+        vkMapMemory(device, lights.storage_buffer_memory, 0, size, 0, &data);
+        memcpy(data, lights.data, size);
+        vkUnmapMemory(device, lights.storage_buffer_memory);
+    }
+
     void clear_vulkan()
     {
         vkDeviceWaitIdle(device);
+
+        vkDestroyBuffer(device, lights.storage_buffer, nullptr);
+        vkFreeMemory(device, lights.storage_buffer_memory, nullptr);
+        delete[] lights.data;
 
         vkDestroyFence(device, compute_finished_fence, nullptr);
 
