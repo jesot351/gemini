@@ -1231,6 +1231,8 @@ namespace SRendering
             image_barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
             image_barrier.srcAccessMask = 0;//VK_ACCESS_MEMORY_READ_BIT;
             image_barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            image_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            image_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             image_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             image_barrier.subresourceRange.baseMipLevel = 0;
             image_barrier.subresourceRange.levelCount = 1;
