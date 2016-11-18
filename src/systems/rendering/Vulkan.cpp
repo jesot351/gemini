@@ -9,6 +9,8 @@
 #include <limits>
 #include <cstring>
 #include <chrono>
+#include <time.h>
+#include <stdlib.h>
 
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
@@ -88,6 +90,8 @@ namespace SRendering
         VkBuffer storage_buffer;
         VkDeviceMemory storage_buffer_memory;
         light_t* data;
+        float* animation_offsets;
+        const float animation_period = 3.1415926535f; // up and down in 2 sec
     } lights;
 
     const char* validation_layers[] = {
@@ -1366,6 +1370,7 @@ namespace SRendering
     void init_lights()
     {
         lights.data = new light_t[lights.num_lights];
+        lights.animation_offsets = new float[lights.num_lights];
 
         size_t size = sizeof(light_t) * lights.num_lights;
         VkDeviceSize buffer_size = size;
@@ -1373,13 +1378,24 @@ namespace SRendering
                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                       &lights.storage_buffer, &lights.storage_buffer_memory);
 
+        srand(time(0));
+
         for (uint32_t i = 0; i < lights.num_lights; ++i)
         {
+            float x = rand() / (float) RAND_MAX * 4.0f - 2.0f;
+            float y = rand() / (float) RAND_MAX * 4.0f - 2.0f;
+            float z = rand() / (float) RAND_MAX * 4.0f - 2.0f;
+            float r = rand() / (float) RAND_MAX;
+            float g = rand() / (float) RAND_MAX;
+            float b = rand() / (float) RAND_MAX;
             lights.data[i] = {
-                {0.0f, 0.0f, 0.0f},
-                {0.0f, 0.0f, 0.0f},
-                1.0f
+                {x, y, z},
+                {r, g, b},
+                0.4f
             };
+
+            float t = rand() / (float) RAND_MAX * 2.0f;
+            lights.animation_offsets[i] = t;
         }
 
         void* data;
@@ -1544,13 +1560,13 @@ namespace SRendering
         vkQueuePresentKHR(present_queue, &present_info);
     }
 
-    void update_transforms(float frame_delta_ms)
+    void update_transforms(float frame_delta_us)
     {
         static glm::mat4 prev_rotation = glm::mat4();
 
         ubo_transforms_t transforms = {};
         transforms.model = glm::rotate(prev_rotation,
-                                       frame_delta_ms / 1e6f * glm::radians(90.0f),
+                                       frame_delta_us / 1e6f * glm::radians(90.0f),
                                        glm::vec3(0.0f, 1.0f, 0.0f));
         prev_rotation = transforms.model;
         transforms.view = glm::lookAt(glm::vec3(-3.0f, -3.0f, -3.0f),
@@ -1567,15 +1583,13 @@ namespace SRendering
         vkUnmapMemory(device, uniform_buffer_memory);
     }
 
-    void update_lights(float frame_delta_ms)
+    void update_lights(float frame_delta_us)
     {
         for (uint32_t i = 0; i < lights.num_lights; ++i)
         {
-            lights.data[i] = {
-                {0.0f, 0.0f, 0.0f},
-                {0.0f, 0.0f, 0.0f},
-                1.0f
-            };
+            lights.animation_offsets[i] += frame_delta_us / 1e6f;
+            float wt = lights.animation_period * lights.animation_offsets[i];
+            lights.data[i].position.y = 2.0f * sin(wt) - 2.0f;
         }
 
         size_t size = sizeof(light_t) * lights.num_lights;
@@ -1592,6 +1606,7 @@ namespace SRendering
         vkDestroyBuffer(device, lights.storage_buffer, nullptr);
         vkFreeMemory(device, lights.storage_buffer_memory, nullptr);
         delete[] lights.data;
+        delete[] lights.animation_offsets;
 
         vkDestroyFence(device, compute_finished_fence, nullptr);
 
