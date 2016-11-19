@@ -93,7 +93,7 @@ namespace SRendering
         VkDeviceMemory storage_buffer_memory;
         light_t* data;
         float* animation_offsets;
-        const float animation_period = 3.1415926535f; // up and down in 2 sec
+        const float animation_freq = 3.1415926535f; // up and down in 2 sec
     } lights;
 
     const char* validation_layers[] = {
@@ -106,10 +106,10 @@ namespace SRendering
 
     const uint32_t num_plane_vertices = 4;
     const vertex_t plane_vertices[num_plane_vertices] = {
-        {{-2.0f, 0.0f, -2.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-        {{2.0f, 0.0f, -2.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{2.0f, 0.0f, 2.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
-        {{-2.0f, 0.0f, 2.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}}
+        {{-2.0f, 0.0f, -2.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{2.0f, 0.0f, -2.0f}, {0.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{2.0f, 0.0f, 2.0f}, {0.0f, -1.0f, 0.0f}, {1.0f, 1.0f}},
+        {{-2.0f, 0.0f, 2.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f}},
     };
 
     const uint32_t num_plane_indices = 6;
@@ -1414,17 +1414,17 @@ namespace SRendering
         for (uint32_t i = 0; i < lights.num_lights; ++i)
         {
             float x = rand() / (float) RAND_MAX * 4.0f - 2.0f;
-            float y = 1.0f;
+            float y = -1.0f;
             float z = rand() / (float) RAND_MAX * 4.0f - 2.0f;
             float r = rand() / (float) RAND_MAX;
             float g = rand() / (float) RAND_MAX;
             float b = rand() / (float) RAND_MAX;
             lights.data[i] = {
                 {x, y, z, 1.0f},
-                {r, g, b, 1.5f}
+                {r, g, b, 0.5f}
             };
 
-            float t = rand() / (float) RAND_MAX * 2.0f;
+            float t = rand() / (float) RAND_MAX * 2.0f * 3.1415926535f / lights.animation_freq;
             lights.animation_offsets[i] = t;
         }
 
@@ -1628,8 +1628,8 @@ namespace SRendering
         for (uint32_t i = 0; i < lights.num_lights; ++i)
         {
             lights.animation_offsets[i] += frame_delta_s;
-            float wt = lights.animation_period * lights.animation_offsets[i];
-            lights.data[i].position.y = 2.0f * sin(wt) + 2.0f;
+            float wt = lights.animation_freq * lights.animation_offsets[i];
+            lights.data[i].position.y = 2.0f * sin(wt) - 2.1f;
         }
 
         size_t size = sizeof(light_t) * lights.num_lights;
