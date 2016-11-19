@@ -50,8 +50,6 @@ namespace SRendering
     VkBuffer vertex_buffer;
     VkDeviceMemory index_buffer_memory;
     VkBuffer index_buffer;
-    VkDeviceMemory uniform_buffer_memory;
-    VkBuffer uniform_buffer;
 
     VkQueue graphics_queue;
     VkQueue compute_queue;
@@ -62,12 +60,16 @@ namespace SRendering
 
     VkRenderPass render_pass;
 
+    VkDeviceMemory graphics_uniform_buffer_memory;
+    VkBuffer graphics_uniform_buffer;
     VkPipelineLayout graphics_pipeline_layout;
     VkDescriptorSetLayout graphics_descriptor_set_layout;
     VkPipeline graphics_pipeline;
     VkDescriptorPool graphics_descriptor_pool;
     VkDescriptorSet graphics_descriptor_set;
 
+    VkDeviceMemory compute_uniform_buffer_memory;
+    VkBuffer compute_uniform_buffer;
     VkPipelineLayout compute_pipeline_layout;
     VkDescriptorSetLayout compute_input_descriptor_set_layout;
     VkDescriptorSetLayout compute_output_descriptor_set_layout;
@@ -104,10 +106,10 @@ namespace SRendering
 
     const uint32_t num_plane_vertices = 4;
     const vertex_t plane_vertices[num_plane_vertices] = {
-        {{-2.0f, 0.0f, -2.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
-        {{2.0f, 0.0f, -2.0f}, {0.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{2.0f, 0.0f, 2.0f}, {0.0f, -1.0f, 0.0f}, {1.0f, 1.0f}},
-        {{-2.0f, 0.0f, 2.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f}}
+        {{-2.0f, 0.0f, -2.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{2.0f, 0.0f, -2.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{2.0f, 0.0f, 2.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
+        {{-2.0f, 0.0f, 2.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}}
     };
 
     const uint32_t num_plane_indices = 6;
@@ -132,7 +134,7 @@ namespace SRendering
 
         create_vertex_buffer();
         create_index_buffer();
-        create_uniform_buffer();
+        create_uniform_buffers();
 
         init_lights();
 
@@ -941,7 +943,7 @@ namespace SRendering
         assert(result == VK_SUCCESS);
 
         VkDescriptorBufferInfo buffer_info = {};
-        buffer_info.buffer = uniform_buffer;
+        buffer_info.buffer = graphics_uniform_buffer;
         buffer_info.offset = 0;
         buffer_info.range = sizeof(ubo_transforms_t);
 
@@ -961,7 +963,7 @@ namespace SRendering
 
     void create_compute_descriptor_set_layouts()
     {
-        VkDescriptorSetLayoutBinding input_bindings[5] = {};
+        VkDescriptorSetLayoutBinding input_bindings[6] = {};
 
         for (uint32_t i = 0; i < 4; ++i)
         {
@@ -972,13 +974,18 @@ namespace SRendering
         }
 
         input_bindings[4].binding = 4;
-        input_bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        input_bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         input_bindings[4].descriptorCount = 1;
         input_bindings[4].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
+        input_bindings[5].binding = 5;
+        input_bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        input_bindings[5].descriptorCount = 1;
+        input_bindings[5].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
         VkDescriptorSetLayoutCreateInfo layout_info = {};
         layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layout_info.bindingCount = 5;
+        layout_info.bindingCount = 6;
         layout_info.pBindings = input_bindings;
 
         VkResult result = vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &compute_input_descriptor_set_layout);
@@ -1034,17 +1041,22 @@ namespace SRendering
 
     void create_compute_descriptor_pool()
     {
-        VkDescriptorPoolSize pool_sizes[3] = {};
+        VkDescriptorPoolSize pool_sizes[4] = {};
         pool_sizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         pool_sizes[0].descriptorCount = 4;
+
         pool_sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         pool_sizes[1].descriptorCount = (uint32_t) swapchain_images.size();
-        pool_sizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+
+        pool_sizes[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         pool_sizes[2].descriptorCount = 1;
+
+        pool_sizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        pool_sizes[3].descriptorCount = 1;
 
         VkDescriptorPoolCreateInfo pool_info = {};
         pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        pool_info.poolSizeCount = 3;
+        pool_info.poolSizeCount = 4;
         pool_info.pPoolSizes = pool_sizes;
         pool_info.maxSets = swapchain_images.size() + 1;
 
@@ -1068,8 +1080,8 @@ namespace SRendering
         assert(result == VK_SUCCESS);
 
         VkDescriptorImageInfo input_image_infos[4] = {};
-        VkDescriptorBufferInfo input_buffer_info = {};
-        VkWriteDescriptorSet input_descriptor_writes[5] = {};
+        VkDescriptorBufferInfo input_buffer_infos[2] = {};
+        VkWriteDescriptorSet input_descriptor_writes[6] = {};
         for (uint32_t i = 0; i < 4; ++i)
         {
             input_image_infos[i].imageView = gbuffer.image_views[i];
@@ -1087,21 +1099,35 @@ namespace SRendering
             input_descriptor_writes[i].pTexelBufferView = nullptr;
         }
 
-        input_buffer_info.buffer = lights.storage_buffer;
-        input_buffer_info.offset = 0;
-        input_buffer_info.range = sizeof(light_t) * lights.num_lights;
+        input_buffer_infos[0].buffer = compute_uniform_buffer;
+        input_buffer_infos[0].offset = 0;
+        input_buffer_infos[0].range = sizeof(ubo_compute_t);
+
+        input_buffer_infos[1].buffer = lights.storage_buffer;
+        input_buffer_infos[1].offset = 0;
+        input_buffer_infos[1].range = sizeof(light_t) * lights.num_lights;
 
         input_descriptor_writes[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         input_descriptor_writes[4].dstSet = compute_input_descriptor_set;
         input_descriptor_writes[4].dstBinding = 4;
         input_descriptor_writes[4].dstArrayElement = 0;
-        input_descriptor_writes[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        input_descriptor_writes[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         input_descriptor_writes[4].descriptorCount = 1;
-        input_descriptor_writes[4].pBufferInfo = &input_buffer_info;
+        input_descriptor_writes[4].pBufferInfo = &input_buffer_infos[0];
         input_descriptor_writes[4].pImageInfo = nullptr;
         input_descriptor_writes[4].pTexelBufferView = nullptr;
 
-        vkUpdateDescriptorSets(device, 5, input_descriptor_writes, 0, nullptr);
+        input_descriptor_writes[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        input_descriptor_writes[5].dstSet = compute_input_descriptor_set;
+        input_descriptor_writes[5].dstBinding = 5;
+        input_descriptor_writes[5].dstArrayElement = 0;
+        input_descriptor_writes[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        input_descriptor_writes[5].descriptorCount = 1;
+        input_descriptor_writes[5].pBufferInfo = &input_buffer_infos[1];
+        input_descriptor_writes[5].pImageInfo = nullptr;
+        input_descriptor_writes[5].pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(device, 6, input_descriptor_writes, 0, nullptr);
 
         // shaded output descriptor
         compute_output_descriptor_sets.resize(swapchain_images.size());
@@ -1359,12 +1385,17 @@ namespace SRendering
         vkFreeMemory(device, staging_buffer_memory, nullptr);
     }
 
-    void create_uniform_buffer()
+    void create_uniform_buffers()
     {
         VkDeviceSize buffer_size = sizeof(ubo_transforms_t);
         create_buffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                      &uniform_buffer, &uniform_buffer_memory);
+                      &graphics_uniform_buffer, &graphics_uniform_buffer_memory);
+
+        buffer_size = sizeof(ubo_compute_t);
+        create_buffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                      &compute_uniform_buffer, &compute_uniform_buffer_memory);
     }
 
     void init_lights()
@@ -1383,15 +1414,14 @@ namespace SRendering
         for (uint32_t i = 0; i < lights.num_lights; ++i)
         {
             float x = rand() / (float) RAND_MAX * 4.0f - 2.0f;
-            float y = rand() / (float) RAND_MAX * 4.0f - 2.0f;
+            float y = 1.0f;
             float z = rand() / (float) RAND_MAX * 4.0f - 2.0f;
             float r = rand() / (float) RAND_MAX;
             float g = rand() / (float) RAND_MAX;
             float b = rand() / (float) RAND_MAX;
             lights.data[i] = {
-                {x, y, z},
-                {r, g, b},
-                0.4f
+                {x, y, z, 1.0f},
+                {r, g, b, 1.5f}
             };
 
             float t = rand() / (float) RAND_MAX * 2.0f;
@@ -1560,14 +1590,14 @@ namespace SRendering
         vkQueuePresentKHR(present_queue, &present_info);
     }
 
-    void update_transforms(float frame_delta_us)
+    void update_ubos(float frame_delta_us)
     {
         static glm::mat4 prev_rotation = glm::mat4();
 
         ubo_transforms_t transforms = {};
-        transforms.model = glm::rotate(prev_rotation,
+        transforms.model = glm::mat4();/*glm::rotate(prev_rotation,
                                        frame_delta_us / 1e6f * glm::radians(90.0f),
-                                       glm::vec3(0.0f, 1.0f, 0.0f));
+                                       glm::vec3(0.0f, 1.0f, 0.0f));*/
         prev_rotation = transforms.model;
         transforms.view = glm::lookAt(glm::vec3(-3.0f, -3.0f, -3.0f),
                                       glm::vec3(0.0f, 0.0f, 0.0f),
@@ -1578,18 +1608,28 @@ namespace SRendering
         transforms.projection[1][1] *= -1;
 
         void* data;
-        vkMapMemory(device, uniform_buffer_memory, 0, sizeof(transforms), 0, &data);
+        vkMapMemory(device, graphics_uniform_buffer_memory, 0, sizeof(transforms), 0, &data);
         memcpy(data, &transforms, sizeof(transforms));
-        vkUnmapMemory(device, uniform_buffer_memory);
+        vkUnmapMemory(device, graphics_uniform_buffer_memory);
+
+        ubo_compute_t ubo_compute;
+        ubo_compute.view = transforms.view;
+        ubo_compute.projection = transforms.projection;
+        ubo_compute.num_lights = lights.num_lights;
+
+        vkMapMemory(device, compute_uniform_buffer_memory, 0, sizeof(ubo_compute), 0, &data);
+        memcpy(data, &ubo_compute, sizeof(ubo_compute));
+        vkUnmapMemory(device, compute_uniform_buffer_memory);
     }
 
     void update_lights(float frame_delta_us)
     {
+        float frame_delta_s = frame_delta_us / 1e6f;
         for (uint32_t i = 0; i < lights.num_lights; ++i)
         {
-            lights.animation_offsets[i] += frame_delta_us / 1e6f;
+            lights.animation_offsets[i] += frame_delta_s;
             float wt = lights.animation_period * lights.animation_offsets[i];
-            lights.data[i].position.y = 2.0f * sin(wt) - 2.0f;
+            lights.data[i].position.y = 2.0f * sin(wt) + 2.0f;
         }
 
         size_t size = sizeof(light_t) * lights.num_lights;
@@ -1618,8 +1658,11 @@ namespace SRendering
         vkFreeMemory(device, vertex_buffer_memory, nullptr);
         vkDestroyBuffer(device, index_buffer, nullptr);
         vkFreeMemory(device, index_buffer_memory, nullptr);
-        vkDestroyBuffer(device, uniform_buffer, nullptr);
-        vkFreeMemory(device, uniform_buffer_memory, nullptr);
+
+        vkDestroyBuffer(device, graphics_uniform_buffer, nullptr);
+        vkFreeMemory(device, graphics_uniform_buffer_memory, nullptr);
+        vkDestroyBuffer(device, compute_uniform_buffer, nullptr);
+        vkFreeMemory(device, compute_uniform_buffer_memory, nullptr);
 
         vkDestroyDescriptorPool(device, compute_descriptor_pool, nullptr);
         vkDestroyPipeline(device, compute_pipeline, nullptr);

@@ -55,11 +55,17 @@ namespace SRendering
         glm::mat4 projection;
     } ubo_transforms_t;
 
+    typedef struct ubo_compute_t
+    {
+        glm::mat4 view;
+        glm::mat4 projection;
+        uint32_t num_lights;
+    } ubo_compute_t;
+
     typedef struct light_t
     {
-        glm::vec3 position;
-        glm::vec3 color;
-        float attenuation_end;
+        glm::vec4 position;
+        glm::vec4 color_attenuation_end;
     } light_t;
 
     typedef struct swapchain_support_details_t
@@ -121,14 +127,14 @@ namespace SRendering
 
     void create_vertex_buffer();
     void create_index_buffer();
-    void create_uniform_buffer();
+    void create_uniform_buffers();
 
     void create_sync_primitives();
 
     void init_lights();
 
     void draw_frame();
-    void update_transforms(float);
+    void update_ubos(float);
     void update_lights(float);
 
     // utils

@@ -27,10 +27,10 @@ int main()
 
     // Initialize systems
     SInput::init_input(0);
-    SPhysics::init_physics(1);
-    SAnimation::init_animation(2);
-    SAI::init_ai(3);
-    SRendering::init_rendering(4, window);
+    // SPhysics::init_physics(1);
+    // SAnimation::init_animation(2);
+    // SAI::init_ai(3);
+    SRendering::init_rendering(1, window);
 
     // Launch worker threads
     uint32_t num_threads = MTaskScheduling::NUM_WORKER_THREADS;

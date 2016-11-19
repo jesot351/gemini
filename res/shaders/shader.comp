@@ -4,9 +4,8 @@
 
 struct light_t
 {
-    vec3 position;
-    vec3 color;
-    float attenuation_end;
+    vec4 position;
+    vec4 color_attenuation_end;
 };
 
 layout (local_size_x = 16, local_size_y = 16) in;
@@ -16,7 +15,14 @@ layout (set = 0, binding = 1) uniform sampler2D gbuffer_albedo;
 layout (set = 0, binding = 2) uniform sampler2D gbuffer_normal;
 layout (set = 0, binding = 3) uniform sampler2D gbuffer_depth;
 
-layout (set = 0, binding = 4) buffer light_buffer
+layout (set = 0, binding = 4) uniform ubo_transforms
+{
+    mat4 view;
+    mat4 projection;
+    uint num_lights;
+} transforms;
+
+layout (std430, set = 0, binding = 5) buffer light_buffer
 {
     light_t lights[];
 };
@@ -30,6 +36,27 @@ void main()
     vec4 normal = texture(gbuffer_normal, ivec2(gl_GlobalInvocationID.xy));
     float depth = texture(gbuffer_depth, ivec2(gl_GlobalInvocationID.xy)).r;
 
-    vec4 final_color = albedo;
+    vec3 lit = vec3(0.0f, 0.0f, 0.0f);
+    for (uint i = 0; i < transforms.num_lights; i++)
+    {
+        vec4 light_position = transforms.view * lights[i].position;
+        vec4 l = light_position - position;
+        float d = length(l);
+        l *= 1/d;
+        float attenuation_end = lights[i].color_attenuation_end.a;
+
+        if (d < attenuation_end)
+        {
+            float ndotl = dot(normal, l);
+            float attenuation = 1 - d / attenuation_end;
+
+            if (ndotl > 0)
+            {
+                lit += ndotl * attenuation * lights[i].color_attenuation_end.rgb;
+            }
+        }
+    }
+
+    vec4 final_color = albedo * vec4(lit, 1.0f);
     imageStore(output_image, ivec2(gl_GlobalInvocationID.xy), final_color);
 }

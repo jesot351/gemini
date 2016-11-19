@@ -52,9 +52,10 @@ namespace SRendering
         task.execute = present_task;
         task.args = nullptr;
         task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-        task.checkpoints_current_frame = MTaskScheduling::SCP_RENDERING3;
+        task.checkpoints_current_frame = MTaskScheduling::SCP_INPUT1;// MTaskScheduling::SCP_RENDERING3;
         MTaskScheduling::s_stacks[system_id][stack_size] = task;
 
+        /*
         // 10 tasks in task group 3
         num_executed_group3.store(9, std::memory_order_relaxed);
         for (uint32_t i = 0; i < 10; ++i)
@@ -141,6 +142,7 @@ namespace SRendering
             task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
             MTaskScheduling::s_stacks[system_id][stack_size] = task;
         }
+        */
 
         MTaskScheduling::s_stack_sizes[system_id].store((MTaskScheduling::s_iterations[system_id] << 7) | stack_size, std::memory_order_release);
 
@@ -198,8 +200,8 @@ namespace SRendering
 
     uint64_t present_task(void* args, uint32_t thread_id)
     {
-        static std::chrono::time_point<std::chrono::high_resolution_clock> prev_t;
         auto t = std::chrono::high_resolution_clock::now();
+        static std::chrono::time_point<std::chrono::high_resolution_clock> prev_t = t;
         std::chrono::duration<double, std::micro> frame_delta = t - prev_t;
 
         if (key_pressed(GLFW_KEY_P))
@@ -210,7 +212,9 @@ namespace SRendering
 
         prev_t = t;
 
-        update_transforms((float) frame_delta.count());
+        float frame_delta_us = (float) frame_delta.count();
+        update_ubos(frame_delta_us);
+        update_lights(frame_delta_us);
         draw_frame();
 
         return MTaskScheduling::SCP_RENDERING4;
