@@ -2,6 +2,11 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
+#define WIDTH 1280
+#define HEIGHT 720
+#define MAX_NUM_TILE_LIGHTS 32
+#define TILE_SIZE 16
+
 struct light_t
 {
     vec4 position;
@@ -15,12 +20,12 @@ layout (set = 0, binding = 1) uniform sampler2D gbuffer_albedo;
 layout (set = 0, binding = 2) uniform sampler2D gbuffer_normal;
 layout (set = 0, binding = 3) uniform sampler2D gbuffer_depth;
 
-layout (set = 0, binding = 4) uniform ubo_transforms
+layout (set = 0, binding = 4) uniform UBO
 {
     mat4 view;
     mat4 projection;
-    uint num_lights;
-} transforms;
+    uint total_num_lights;
+} ubo;
 
 layout (std430, set = 0, binding = 5) buffer light_buffer
 {
@@ -29,21 +34,114 @@ layout (std430, set = 0, binding = 5) buffer light_buffer
 
 layout (set = 1, binding = 0, rgba8) uniform writeonly image2D output_image;
 
+shared uint s_min_z;
+shared uint s_max_z;
+shared uint s_tile_light_indices[MAX_NUM_TILE_LIGHTS];
+shared uint s_tile_num_lights;
+
 void main()
 {
-    vec4 position = texture(gbuffer_position, ivec2(gl_GlobalInvocationID.xy));
-    vec4 albedo = texture(gbuffer_albedo, ivec2(gl_GlobalInvocationID.xy));
-    vec4 normal = texture(gbuffer_normal, ivec2(gl_GlobalInvocationID.xy));
-    float depth = texture(gbuffer_depth, ivec2(gl_GlobalInvocationID.xy)).r;
+    uvec2 giid = gl_GlobalInvocationID.xy;
+    vec4 position = texture(gbuffer_position, giid);
+    vec4 albedo = texture(gbuffer_albedo, giid);
+    vec4 normal = texture(gbuffer_normal, giid);
+    float depth = texture(gbuffer_depth, giid).r;
+
+    if (gl_LocalInvocationIndex == 0)
+    {
+        s_tile_num_lights = 0;
+        s_min_z = 0x7F7FFFFF; // max float
+        s_max_z = 0;
+    }
+
+    barrier();
+    memoryBarrierShared();
+
+    atomicMin(s_min_z, floatBitsToUint(position.z));
+    atomicMax(s_max_z, floatBitsToUint(position.z));
+
+    barrier();
+    memoryBarrierShared();
+
+    float min_tile_z = uintBitsToFloat(s_min_z);
+    float max_tile_z = uintBitsToFloat(s_max_z);
+
+
+    vec2 tile_scale = vec2(WIDTH, HEIGHT) * 1 / float(2 * TILE_SIZE);
+    vec2 tile_bias = tile_scale - vec2(gl_WorkGroupID);
+
+    // extract frustum planes
+    vec4 c1 = vec4(ubo.projection[0][0] * tile_scale.x, 0.0f, -tile_bias.x, 0.0f);
+    vec4 c2 = vec4(0.0f, -ubo.projection[1][1] * tile_scale.y, tile_bias.y, 0.0f);
+    vec4 c4 = vec4(0.0f, 0.0f, -1.0f, 0.0f);
+
+    vec4 frustum_planes[6];
+    frustum_planes[0] = c4 - c1;
+    frustum_planes[1] = c4 + c1;
+    frustum_planes[2] = c4 - c2;
+    frustum_planes[3] = c4 + c2;
+    frustum_planes[4] = vec4(0.0f, 0.0f, 1.0f, min_tile_z);
+    frustum_planes[5] = vec4(0.0f, 0.0f, -1.0f, -max_tile_z);
+
+/*
+    float l = -WIDTH  / 2.0f + gl_WorkGroupID.x * float(TILE_SIZE);
+    float r = -WIDTH  / 2.0f + (1 + gl_WorkGroupID.x) * float(TILE_SIZE);
+    float t = -HEIGHT / 2.0f + gl_WorkGroupID.y * float(TILE_SIZE);
+    float b = -HEIGHT / 2.0f + (1 + gl_WorkGroupID.y) * float(TILE_SIZE);
+    float n = min_tile_z;
+    float f = max_tile_z;
+
+    vec4 c1 = vec4(2*n/(r-l), 0.0f, (l+r)/(l-r), 0.0f);
+    vec4 c2 = vec4(0.0f, 2*n/(t-b), (t+b)/(b-t), 0.0f);
+    vec4 c3 = vec4(0.0f, 0.0f, f/(f-n), n*f/(n-f));
+    vec4 c4 = vec4(0.0f, 0.0f, 1.0f, 0.0f);
+
+    vec4 frustum_planes[6];
+    frustum_planes[0] = c4 + c1; // left
+    frustum_planes[1] = c4 - c1; // right
+    frustum_planes[2] = c4 + c2; // bottom
+    frustum_planes[3] = c4 - c2; // top
+    frustum_planes[4] = vec4(0, 0, 1, n);//c3;      // near = (0, 0, 1, -n)
+    frustum_planes[5] = vec4(0, 0, -1, -f);//c4 - c3; // far = (0, 0, -1, f)
+*/
+    for (uint i = 0; i < 4; ++i)
+    {
+        frustum_planes[i] *= 1 / length(frustum_planes[i].xyz);
+    }
+
+    // cull lights for this tile
+    for (uint light_index = gl_LocalInvocationIndex; light_index < ubo.total_num_lights; light_index += TILE_SIZE*TILE_SIZE)
+    {
+        vec4 light_position = ubo.view * lights[light_index].position;
+
+        bool in_frustum = true;
+        for (uint i = 0; i < 6; ++i)
+        {
+            float d = dot(frustum_planes[i], light_position);
+            in_frustum = in_frustum && (d >= -lights[light_index].color_attenuation_end.a);
+        }
+
+        if (in_frustum)
+        {
+            uint list_index = atomicAdd(s_tile_num_lights, 1);
+            s_tile_light_indices[list_index] = light_index;
+        }
+    }
+
+    barrier();
+    memoryBarrierShared();
+
+    uint num_lights = s_tile_num_lights;
 
     vec3 lit = vec3(0.0f, 0.0f, 0.0f);
-    for (uint i = 0; i < transforms.num_lights; i++)
+    for (uint i = 0; i < num_lights; ++i)
     {
-        vec4 light_position = transforms.view * lights[i].position;
+        uint light_index = s_tile_light_indices[i];
+        vec4 light_position = ubo.view * lights[light_index].position;
         vec4 l = light_position - position;
         float d = length(l);
         l *= 1/d;
-        float attenuation_end = lights[i].color_attenuation_end.a;
+        float attenuation_end = lights[light_index].color_attenuation_end.a;
 
         if (d < attenuation_end)
         {
@@ -52,11 +150,11 @@ void main()
 
             if (ndotl > 0)
             {
-                lit += ndotl * attenuation * lights[i].color_attenuation_end.rgb;
+                lit += ndotl * attenuation * lights[light_index].color_attenuation_end.rgb;
             }
         }
     }
 
-    vec4 final_color = albedo * vec4(lit, 1.0f);
-    imageStore(output_image, ivec2(gl_GlobalInvocationID.xy), final_color);
+    vec4 final_color = /*0.5 * vec4(num_lights) / 40.0f + 0.5 **/ albedo * vec4(lit, 1.0f);
+    imageStore(output_image, ivec2(giid), final_color);
 }

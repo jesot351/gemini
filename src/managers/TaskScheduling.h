@@ -12,7 +12,7 @@
 namespace MTaskScheduling
 {
     const uint32_t NUM_STACKS             = 16;
-    const uint32_t NUM_ACTIVE_STACKS      = 2;
+    const uint32_t NUM_ACTIVE_STACKS      = 5;
     const uint32_t STACK_SIZE             = 128;
     const uint32_t NUM_WORKER_THREADS     = MPlatform::NUM_HARDWARE_THREADS;
     const uint32_t MAX_NUM_WORKER_THREADS = 32;

@@ -53,6 +53,7 @@ namespace SRendering
         glm::mat4 model;
         glm::mat4 view;
         glm::mat4 projection;
+        glm::mat4 padding;
     } ubo_transforms_t;
 
     typedef struct ubo_compute_t
@@ -125,8 +126,8 @@ namespace SRendering
     void create_compute_command_pool();
     void create_compute_command_buffers();
 
-    void create_vertex_buffer();
-    void create_index_buffer();
+    void create_vertex_buffers();
+    void create_index_buffers();
     void create_uniform_buffers();
 
     void create_sync_primitives();

@@ -22,6 +22,18 @@
 
 namespace SRendering
 {
+    const uint32_t num_cubes = 8;
+    const glm::vec3 cube_positions[num_cubes] = {
+        {-2.0f, -0.5f, -2.0f},
+        {2.0f, -0.5f, -2.0f},
+        {2.0f, -0.5f, 2.0f},
+        {-2.0f, -0.5f, 2.0f},
+        {-2.0f, -2.0f, 0.0f},
+        {0.0f, -2.5f, -2.0f},
+        {2.0f, -3.0f, 0.0f},
+        {0.0f, -3.5f, 2.0f},
+    };
+
     VkInstance instance;
     VkDebugReportCallbackEXT callback;
     VkPhysicalDevice physical_device = VK_NULL_HANDLE;
@@ -46,10 +58,14 @@ namespace SRendering
     VkCommandPool graphics_command_pool;
     VkCommandPool compute_command_pool;
 
-    VkDeviceMemory vertex_buffer_memory;
-    VkBuffer vertex_buffer;
-    VkDeviceMemory index_buffer_memory;
-    VkBuffer index_buffer;
+    VkDeviceMemory plane_vertex_buffer_memory;
+    VkBuffer plane_vertex_buffer;
+    VkDeviceMemory plane_index_buffer_memory;
+    VkBuffer plane_index_buffer;
+    VkDeviceMemory cube_vertex_buffer_memory;
+    VkBuffer cube_vertex_buffer;
+    VkDeviceMemory cube_index_buffer_memory;
+    VkBuffer cube_index_buffer;
 
     VkQueue graphics_queue;
     VkQueue compute_queue;
@@ -66,7 +82,7 @@ namespace SRendering
     VkDescriptorSetLayout graphics_descriptor_set_layout;
     VkPipeline graphics_pipeline;
     VkDescriptorPool graphics_descriptor_pool;
-    VkDescriptorSet graphics_descriptor_set;
+    VkDescriptorSet graphics_descriptor_sets[num_cubes + 1]; // cubes and a plane
 
     VkDeviceMemory compute_uniform_buffer_memory;
     VkBuffer compute_uniform_buffer;
@@ -88,12 +104,12 @@ namespace SRendering
     VkFence compute_finished_fence;
 
     struct {
-        const uint32_t num_lights = 32;
+        const uint32_t num_lights = 1024;
         VkBuffer storage_buffer;
         VkDeviceMemory storage_buffer_memory;
         light_t* data;
         float* animation_offsets;
-        const float animation_freq = 3.1415926535f; // up and down in 2 sec
+        const float animation_freq = 2.0f * 3.1415926535f / 4.0f; // up and down in 4 sec
     } lights;
 
     const char* validation_layers[] = {
@@ -106,15 +122,64 @@ namespace SRendering
 
     const uint32_t num_plane_vertices = 4;
     const vertex_t plane_vertices[num_plane_vertices] = {
-        {{-2.0f, 0.0f, -2.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
-        {{2.0f, 0.0f, -2.0f}, {0.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{2.0f, 0.0f, 2.0f}, {0.0f, -1.0f, 0.0f}, {1.0f, 1.0f}},
-        {{-2.0f, 0.0f, 2.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f}},
+        {{-4.0f, 0.0f, -4.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{4.0f, 0.0f, -4.0f}, {0.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{4.0f, 0.0f, 4.0f}, {0.0f, -1.0f, 0.0f}, {1.0f, 1.0f}},
+        {{-4.0f, 0.0f, 4.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f}},
     };
 
     const uint32_t num_plane_indices = 6;
     const uint32_t plane_indices[num_plane_indices] = {
         0, 1, 2, 2, 3, 0,
+    };
+
+    const uint32_t num_cube_vertices = 24;
+    const vertex_t cube_vertices[num_cube_vertices] = {
+        {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},   // side 1
+        {{0.5f, -0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+        {{-0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+        {{0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+
+        {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f}}, // side 2
+        {{-0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f}},
+        {{0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {1.0f, 0.0f}},
+        {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {1.0f, 1.0f}},
+
+        {{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},   // side 3
+        {{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
+        {{0.5f, 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{0.5f, 0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
+
+        {{-0.5f, -0.5f, -0.5f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f}}, // side 4
+        {{0.5f, -0.5f, -0.5f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f}},
+        {{-0.5f, -0.5f, 0.5f}, {0.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{0.5f, -0.5f, 0.5f}, {0.0f, -1.0f, 0.0f}, {1.0f, 1.0f}},
+
+        {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},   // side 5
+        {{0.5f, 0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+        {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{0.5f, 0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
+
+        {{-0.5f, -0.5f, -0.5f}, {-1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}}, // side 6
+        {{-0.5f, -0.5f, 0.5f}, {-1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+        {{-0.5f, 0.5f, -0.5f}, {-1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{-0.5f, 0.5f, 0.5f}, {-1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
+    };
+
+    const uint32_t num_cube_indices = 36;
+    const uint32_t cube_indices[num_cube_indices] = {
+        0, 1, 2,    // side 1
+        2, 1, 3,
+        4, 5, 6,    // side 2
+        6, 5, 7,
+        8, 9, 10,   // side 3
+        10, 9, 11,
+        12, 13, 14, // side 4
+        14, 13, 15,
+        16, 17, 18, // side 5
+        18, 17, 19,
+        20, 21, 22, // side 6
+        22, 21, 23,
     };
 
     void init_vulkan(GLFWwindow* window)
@@ -132,8 +197,8 @@ namespace SRendering
         create_render_pass();
         create_gbuffer();
 
-        create_vertex_buffer();
-        create_index_buffer();
+        create_vertex_buffers();
+        create_index_buffers();
         create_uniform_buffers();
 
         init_lights();
@@ -918,13 +983,13 @@ namespace SRendering
     {
         VkDescriptorPoolSize pool_size = {};
         pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        pool_size.descriptorCount = 1;
+        pool_size.descriptorCount = num_cubes + 1;
 
         VkDescriptorPoolCreateInfo pool_info = {};
         pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         pool_info.poolSizeCount = 1;
         pool_info.pPoolSizes = &pool_size;
-        pool_info.maxSets = 1;
+        pool_info.maxSets = num_cubes + 1;
 
         VkResult result = vkCreateDescriptorPool(device, &pool_info, nullptr, &graphics_descriptor_pool);
         assert(result == VK_SUCCESS);
@@ -932,33 +997,43 @@ namespace SRendering
 
     void create_graphics_descriptor_sets()
     {
-        VkDescriptorSetLayout layouts[] = { graphics_descriptor_set_layout };
+        VkDescriptorSetLayout layouts[num_cubes + 1];
+        for (uint32_t i = 0; i < num_cubes + 1; ++i)
+        {
+            layouts[i] = graphics_descriptor_set_layout;
+        }
         VkDescriptorSetAllocateInfo alloc_info = {};
         alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         alloc_info.descriptorPool = graphics_descriptor_pool;
-        alloc_info.descriptorSetCount = 1;
+        alloc_info.descriptorSetCount = num_cubes + 1;
         alloc_info.pSetLayouts = layouts;
 
-        VkResult result = vkAllocateDescriptorSets(device, &alloc_info, &graphics_descriptor_set);
+        VkResult result = vkAllocateDescriptorSets(device, &alloc_info, graphics_descriptor_sets);
         assert(result == VK_SUCCESS);
 
-        VkDescriptorBufferInfo buffer_info = {};
-        buffer_info.buffer = graphics_uniform_buffer;
-        buffer_info.offset = 0;
-        buffer_info.range = sizeof(ubo_transforms_t);
+        VkDescriptorBufferInfo buffer_infos[num_cubes + 1] = {};
+        for (uint32_t i = 0; i < num_cubes + 1; ++i)
+        {
+            buffer_infos[i].buffer = graphics_uniform_buffer;
+            buffer_infos[i].offset = i * sizeof(ubo_transforms_t);
+            buffer_infos[i].range = sizeof(ubo_transforms_t);
+        }
 
-        VkWriteDescriptorSet descriptor_write = {};
-        descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_write.dstSet = graphics_descriptor_set;
-        descriptor_write.dstBinding = 0;
-        descriptor_write.dstArrayElement = 0;
-        descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptor_write.descriptorCount = 1;
-        descriptor_write.pBufferInfo = &buffer_info;
-        descriptor_write.pImageInfo = nullptr;
-        descriptor_write.pTexelBufferView = nullptr;
+        VkWriteDescriptorSet descriptor_writes[num_cubes + 1] = {};
+        for (uint32_t i = 0; i < num_cubes + 1; ++i)
+        {
+            descriptor_writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptor_writes[i].dstSet = graphics_descriptor_sets[i];
+            descriptor_writes[i].dstBinding = 0;
+            descriptor_writes[i].dstArrayElement = 0;
+            descriptor_writes[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptor_writes[i].descriptorCount = 1;
+            descriptor_writes[i].pBufferInfo = &buffer_infos[i];
+            descriptor_writes[i].pImageInfo = nullptr;
+            descriptor_writes[i].pTexelBufferView = nullptr;
+        }
 
-        vkUpdateDescriptorSets(device, 1, &descriptor_write, 0, nullptr);
+        vkUpdateDescriptorSets(device, num_cubes + 1, descriptor_writes, 0, nullptr);
     }
 
     void create_compute_descriptor_set_layouts()
@@ -1216,9 +1291,9 @@ namespace SRendering
         render_pass_info.renderArea.offset = {0, 0};
         render_pass_info.renderArea.extent = swapchain_extent;
         VkClearValue clear_values[4] = {};
-        clear_values[0].color = {0.0f, 0.2f, 0.4f, 1.0f};
-        clear_values[1].color = {0.0f, 0.2f, 0.4f, 1.0f};
-        clear_values[2].color = {0.0f, 0.2f, 0.4f, 1.0f};
+        clear_values[0].color = {0.0f, 0.0f, 10000.0f, 1.0f}; // position
+        clear_values[1].color = {0.0f, 0.2f, 0.4f, 1.0f}; // albedo
+        clear_values[2].color = {0.0f, 0.0f, 0.0f, 0.0f}; // normal
         clear_values[3].depthStencil = {1.0f, 0};
 
         render_pass_info.clearValueCount = 4;
@@ -1228,16 +1303,29 @@ namespace SRendering
 
         vkCmdBindPipeline(graphics_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
 
-        VkBuffer vertex_buffers[] = {vertex_buffer};
-        VkDeviceSize offsets[] = {0};
+        // draw plane
+        VkBuffer vertex_buffers[] = { plane_vertex_buffer };
+        VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(graphics_command_buffer, 0, 1, vertex_buffers, offsets);
-
-        vkCmdBindIndexBuffer(graphics_command_buffer, index_buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(graphics_command_buffer, plane_index_buffer, 0, VK_INDEX_TYPE_UINT32);
 
         vkCmdBindDescriptorSets(graphics_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                graphics_pipeline_layout, 0, 1, &graphics_descriptor_set, 0, nullptr);
+                                graphics_pipeline_layout, 0, 1, &graphics_descriptor_sets[0], 0, nullptr);
 
         vkCmdDrawIndexed(graphics_command_buffer, num_plane_indices, 1, 0, 0, 0);
+
+        // draw cubes
+        vertex_buffers[0] = cube_vertex_buffer;
+        vkCmdBindVertexBuffers(graphics_command_buffer, 0, 1, vertex_buffers, offsets);
+        vkCmdBindIndexBuffer(graphics_command_buffer, cube_index_buffer, 0, VK_INDEX_TYPE_UINT32);
+
+        for (uint32_t i = 1; i < num_cubes + 1; ++i)
+        {
+            vkCmdBindDescriptorSets(graphics_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    graphics_pipeline_layout, 0, 1, &graphics_descriptor_sets[i], 0, nullptr);
+
+            vkCmdDrawIndexed(graphics_command_buffer, num_cube_indices, 1, 0, 0, 0);
+        }
 
         vkCmdEndRenderPass(graphics_command_buffer);
 
@@ -1335,51 +1423,79 @@ namespace SRendering
         }
     }
 
-    void create_vertex_buffer()
+    void create_vertex_buffers()
     {
-        VkDeviceSize buffer_size = sizeof(plane_vertices[0]) * num_plane_vertices;
+        VkDeviceSize plane_buffer_size = sizeof(plane_vertices[0]) * num_plane_vertices;
+        VkDeviceSize cube_buffer_size = sizeof(cube_vertices[0]) * num_cube_vertices;
+        VkDeviceSize staging_buffer_size = std::max(plane_buffer_size, cube_buffer_size);
 
         VkBuffer staging_buffer;
         VkDeviceMemory staging_buffer_memory;
-        create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        create_buffer(staging_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                       &staging_buffer, &staging_buffer_memory);
 
+        // plane vertex buffer
         void* data;
-        vkMapMemory(device, staging_buffer_memory, 0, buffer_size, 0, &data);
-        memcpy(data, plane_vertices, (size_t) buffer_size);
+        vkMapMemory(device, staging_buffer_memory, 0, plane_buffer_size, 0, &data);
+        memcpy(data, plane_vertices, (size_t) plane_buffer_size);
         vkUnmapMemory(device, staging_buffer_memory);
 
-        create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        create_buffer(plane_buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                      &vertex_buffer, &vertex_buffer_memory);
+                      &plane_vertex_buffer, &plane_vertex_buffer_memory);
 
-        copy_buffer(staging_buffer, vertex_buffer, buffer_size);
+        copy_buffer(staging_buffer, plane_vertex_buffer, plane_buffer_size);
+
+        // plane vertex buffer
+        vkMapMemory(device, staging_buffer_memory, 0, cube_buffer_size, 0, &data);
+        memcpy(data, cube_vertices, (size_t) cube_buffer_size);
+        vkUnmapMemory(device, staging_buffer_memory);
+
+        create_buffer(plane_buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                      &cube_vertex_buffer, &cube_vertex_buffer_memory);
+
+        copy_buffer(staging_buffer, cube_vertex_buffer, cube_buffer_size);
 
         vkDestroyBuffer(device, staging_buffer, nullptr);
         vkFreeMemory(device, staging_buffer_memory, nullptr);
     }
 
-    void create_index_buffer()
+    void create_index_buffers()
     {
-        VkDeviceSize buffer_size = sizeof(plane_indices[0]) * num_plane_indices;
+        VkDeviceSize plane_buffer_size = sizeof(plane_indices[0]) * num_plane_indices;
+        VkDeviceSize cube_buffer_size = sizeof(cube_indices[0]) * num_cube_indices;
+        VkDeviceSize staging_buffer_size = std::max(plane_buffer_size, cube_buffer_size);
 
         VkBuffer staging_buffer;
         VkDeviceMemory staging_buffer_memory;
-        create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        create_buffer(staging_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                       &staging_buffer, &staging_buffer_memory);
 
+        // plane index buffer
         void* data;
-        vkMapMemory(device, staging_buffer_memory, 0, buffer_size, 0, &data);
-        memcpy(data, plane_indices, (size_t) buffer_size);
+        vkMapMemory(device, staging_buffer_memory, 0, plane_buffer_size, 0, &data);
+        memcpy(data, plane_indices, (size_t) plane_buffer_size);
         vkUnmapMemory(device, staging_buffer_memory);
 
-        create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        create_buffer(plane_buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                      &index_buffer, &index_buffer_memory);
+                      &plane_index_buffer, &plane_index_buffer_memory);
 
-        copy_buffer(staging_buffer, index_buffer, buffer_size);
+        copy_buffer(staging_buffer, plane_index_buffer, plane_buffer_size);
+
+        // plane index buffer
+        vkMapMemory(device, staging_buffer_memory, 0, cube_buffer_size, 0, &data);
+        memcpy(data, cube_indices, (size_t) cube_buffer_size);
+        vkUnmapMemory(device, staging_buffer_memory);
+
+        create_buffer(cube_buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                      &cube_index_buffer, &cube_index_buffer_memory);
+
+        copy_buffer(staging_buffer, cube_index_buffer, cube_buffer_size);
 
         vkDestroyBuffer(device, staging_buffer, nullptr);
         vkFreeMemory(device, staging_buffer_memory, nullptr);
@@ -1387,7 +1503,7 @@ namespace SRendering
 
     void create_uniform_buffers()
     {
-        VkDeviceSize buffer_size = sizeof(ubo_transforms_t);
+        VkDeviceSize buffer_size = sizeof(ubo_transforms_t) * (num_cubes + 1);
         create_buffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                       &graphics_uniform_buffer, &graphics_uniform_buffer_memory);
@@ -1413,9 +1529,9 @@ namespace SRendering
 
         for (uint32_t i = 0; i < lights.num_lights; ++i)
         {
-            float x = rand() / (float) RAND_MAX * 4.0f - 2.0f;
+            float x = rand() / (float) RAND_MAX * 8.0f - 4.0f;
             float y = -1.0f;
-            float z = rand() / (float) RAND_MAX * 4.0f - 2.0f;
+            float z = rand() / (float) RAND_MAX * 8.0f - 4.0f;
             float r = rand() / (float) RAND_MAX;
             float g = rand() / (float) RAND_MAX;
             float b = rand() / (float) RAND_MAX;
@@ -1427,6 +1543,30 @@ namespace SRendering
             float t = rand() / (float) RAND_MAX * 2.0f * 3.1415926535f / lights.animation_freq;
             lights.animation_offsets[i] = t;
         }
+
+        /*
+        lights.data[0] = {
+            {-1.0f, -1.0f, -1.0f, 1.0f},
+            {1.0f, 0.0f, 0.0f, 0.9f}
+        };
+        lights.data[1] = {
+            {1.0f, -1.0f, -1.0f, 1.0f},
+            {0.0f, 1.0f, 0.0f, 0.9f}
+        };
+        lights.data[2] = {
+            {1.0f, -1.0f, 1.0f, 1.0f},
+            {0.0f, 0.0f, 1.0f, 0.9f}
+        };
+        lights.data[3] = {
+            {-1.0f, -1.0f, 1.0f, 1.0f},
+            {1.0f, 1.0f, 0.0f, 0.9f}
+        };
+
+        lights.animation_offsets[0] = 0.00f * 2.0f * 3.1415926535f / lights.animation_freq;
+        lights.animation_offsets[1] = 0.25f * 2.0f * 3.1415926535f / lights.animation_freq;
+        lights.animation_offsets[2] = 0.50f * 2.0f * 3.1415926535f / lights.animation_freq;
+        lights.animation_offsets[3] = 0.75f * 2.0f * 3.1415926535f / lights.animation_freq;
+        */
 
         void* data;
         vkMapMemory(device, lights.storage_buffer_memory, 0, size, 0, &data);
@@ -1592,29 +1732,34 @@ namespace SRendering
 
     void update_ubos(float frame_delta_us)
     {
-        static glm::mat4 prev_rotation = glm::mat4();
+        ubo_transforms_t transforms[num_cubes + 1] = {};
 
-        ubo_transforms_t transforms = {};
-        transforms.model = glm::mat4();/*glm::rotate(prev_rotation,
-                                       frame_delta_us / 1e6f * glm::radians(90.0f),
-                                       glm::vec3(0.0f, 1.0f, 0.0f));*/
-        prev_rotation = transforms.model;
-        transforms.view = glm::lookAt(glm::vec3(-3.0f, -3.0f, -3.0f),
-                                      glm::vec3(0.0f, 0.0f, 0.0f),
+        // plane
+        transforms[0].model = glm::mat4();
+        transforms[0].view = glm::lookAt(glm::vec3(0.0f, -5.0f, -9.0f),
+                                      glm::vec3(0.0f, -1.0f, 0.0f),
                                       glm::vec3(0.0f, -1.0f, 0.0f));
-        transforms.projection = glm::perspective(glm::radians(45.0f),
+        transforms[0].projection = glm::perspective(glm::radians(45.0f),
                                                  swapchain_extent.width / (float) swapchain_extent.height,
-                                                 0.1f, 10.0f);
-        transforms.projection[1][1] *= -1;
+                                                 0.1f, 100.0f);
+        transforms[0].projection[1][1] *= -1;
+
+        // cubes
+        for (uint32_t i = 1; i < num_cubes + 1; ++i)
+        {
+            transforms[i].model = glm::translate(glm::mat4(1.0f), cube_positions[i - 1]);
+            transforms[i].view = transforms[0].view;
+            transforms[i].projection = transforms[0].projection;
+        }
 
         void* data;
         vkMapMemory(device, graphics_uniform_buffer_memory, 0, sizeof(transforms), 0, &data);
-        memcpy(data, &transforms, sizeof(transforms));
+        memcpy(data, transforms, sizeof(transforms));
         vkUnmapMemory(device, graphics_uniform_buffer_memory);
 
         ubo_compute_t ubo_compute;
-        ubo_compute.view = transforms.view;
-        ubo_compute.projection = transforms.projection;
+        ubo_compute.view = transforms[0].view;
+        ubo_compute.projection = transforms[0].projection;
         ubo_compute.num_lights = lights.num_lights;
 
         vkMapMemory(device, compute_uniform_buffer_memory, 0, sizeof(ubo_compute), 0, &data);
@@ -1629,7 +1774,7 @@ namespace SRendering
         {
             lights.animation_offsets[i] += frame_delta_s;
             float wt = lights.animation_freq * lights.animation_offsets[i];
-            lights.data[i].position.y = 2.0f * sin(wt) - 2.1f;
+            lights.data[i].position.y = 4.0f * sin(wt) - 4.1f;
         }
 
         size_t size = sizeof(light_t) * lights.num_lights;
@@ -1654,10 +1799,14 @@ namespace SRendering
         vkDestroySemaphore(device, gbuffer_finished_semaphore, nullptr);
         vkDestroySemaphore(device, image_available_semaphore, nullptr);
 
-        vkDestroyBuffer(device, vertex_buffer, nullptr);
-        vkFreeMemory(device, vertex_buffer_memory, nullptr);
-        vkDestroyBuffer(device, index_buffer, nullptr);
-        vkFreeMemory(device, index_buffer_memory, nullptr);
+        vkDestroyBuffer(device, plane_vertex_buffer, nullptr);
+        vkFreeMemory(device, plane_vertex_buffer_memory, nullptr);
+        vkDestroyBuffer(device, plane_index_buffer, nullptr);
+        vkFreeMemory(device, plane_index_buffer_memory, nullptr);
+        vkDestroyBuffer(device, cube_vertex_buffer, nullptr);
+        vkFreeMemory(device, cube_vertex_buffer_memory, nullptr);
+        vkDestroyBuffer(device, cube_index_buffer, nullptr);
+        vkFreeMemory(device, cube_index_buffer_memory, nullptr);
 
         vkDestroyBuffer(device, graphics_uniform_buffer, nullptr);
         vkFreeMemory(device, graphics_uniform_buffer_memory, nullptr);

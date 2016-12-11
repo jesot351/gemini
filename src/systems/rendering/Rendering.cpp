@@ -52,10 +52,9 @@ namespace SRendering
         task.execute = present_task;
         task.args = nullptr;
         task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-        task.checkpoints_current_frame = MTaskScheduling::SCP_INPUT1;// MTaskScheduling::SCP_RENDERING3;
+        task.checkpoints_current_frame = MTaskScheduling::SCP_RENDERING3;
         MTaskScheduling::s_stacks[system_id][stack_size] = task;
 
-        /*
         // 10 tasks in task group 3
         num_executed_group3.store(9, std::memory_order_relaxed);
         for (uint32_t i = 0; i < 10; ++i)
@@ -142,7 +141,6 @@ namespace SRendering
             task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
             MTaskScheduling::s_stacks[system_id][stack_size] = task;
         }
-        */
 
         MTaskScheduling::s_stack_sizes[system_id].store((MTaskScheduling::s_iterations[system_id] << 7) | stack_size, std::memory_order_release);
 
