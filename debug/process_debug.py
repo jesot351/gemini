@@ -22,7 +22,7 @@ def process_debug(i="debug.txt", o="debug.html"):
         elif "----" in line:
             pass
         else:
-            ss, se, ee, rdtscp_s, rdtscp_e, s, scp_prev, scp_curr = [ float(x.strip()) for x in line.split("|") ]
+            ss, se, ee, rdtscp_s, rdtscp_e, s, scp_prev, scp_curr, scp_reached = [ float(x.strip()) for x in line.split("|") ]
             s, scp_prev, scp_curr = [ int(x) for x in [ s, scp_prev, scp_curr ] ]
             if ss < time_offset:
                 time_offset = ss

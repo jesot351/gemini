@@ -66,7 +66,8 @@ namespace MTaskScheduling
     // profiling functions
     void prof_sched_start(uint32_t);
     void prof_sched_end_exec_start(uint32_t, uint32_t, task_t*);
-    void prof_exec_end(uint32_t);
+    void prof_exec_end(uint32_t, uint64_t);
+    void prof_log(uint32_t, uint32_t);
     void write_profiling();
     double timestamp();
 }

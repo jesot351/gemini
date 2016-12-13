@@ -10,6 +10,7 @@
 #include <smmintrin.h> // SSE4.1: _mm_blendv_epi8
 #if PROFILING
 #include <fstream>
+#include <iomanip>
 #include <chrono>
 #endif
 
@@ -42,10 +43,23 @@ namespace MTaskScheduling
         uint64_t reached_checkpoints;
     } profiling_item_t;
 
-    uint32_t profiling_i[PROFILING_THREADS];
-    profiling_item_t profiling_log[PROFILING_THREADS][PROFILING_SIZE];
-    uint64_t rdtscp_ss[PROFILING_THREADS];
-    uint64_t rdtscp_es[PROFILING_THREADS];
+    // temp storage
+    struct {
+        double sched_start;
+        double sched_end;
+        double exec_end;
+        uint64_t rdtscp_ss;
+        uint64_t rdtscp_se;
+        uint64_t rdtscp_ee;
+        uint32_t stack;
+        uint64_t checkpoints_previous_frame;
+        uint64_t checkpoints_current_frame;
+        uint64_t reached_checkpoints;
+    } prof[PROFILING_THREADS];
+
+    // profiling log
+    uint32_t profiling_i[4][PROFILING_THREADS];
+    profiling_item_t profiling_log[4][PROFILING_THREADS][PROFILING_SIZE];
 #endif
 
     ALIGN(64) const uint32_t range_16[16]       = {          0,          1,          2,          3,
@@ -185,7 +199,8 @@ namespace MTaskScheduling
 
             uint64_t reached_checkpoints = task.execute(task.args, thread_id);
 
-            prof_exec_end(thread_id);
+            prof_exec_end(thread_id, reached_checkpoints);
+            prof_log(thread_id, (ss >> 7));
 
             if (g_total_executed.fetch_add(1, std::memory_order_relaxed) == 10000000)
             {
@@ -214,34 +229,47 @@ namespace MTaskScheduling
     inline void prof_sched_start(uint32_t thread_id)
     {
 #if PROFILING
-        uint32_t i = profiling_i[thread_id] % PROFILING_SIZE;
-        profiling_log[thread_id][i].sched_start = timestamp();
-        rdtscp_ss[thread_id] = asm_rdtscp();
+        prof[thread_id].sched_start = timestamp();
+        prof[thread_id].rdtscp_ss = asm_rdtscp();
 #endif
     }
 
     inline void prof_sched_end_exec_start(uint32_t thread_id, uint32_t stack, task_t* task)
     {
 #if PROFILING
-        uint64_t rdtscp_se = asm_rdtscp();
-        uint32_t i = profiling_i[thread_id] % PROFILING_SIZE;
-        profiling_log[thread_id][i].rdtscp_sched = rdtscp_se - rdtscp_ss[thread_id];
-        profiling_log[thread_id][i].sched_end = timestamp();
-        profiling_log[thread_id][i].checkpoints_previous_frame = task->checkpoints_previous_frame;
-        profiling_log[thread_id][i].checkpoints_current_frame = task->checkpoints_current_frame;
-        profiling_log[thread_id][i].stack = stack;
-        rdtscp_es[thread_id] = asm_rdtscp();
+        prof[thread_id].sched_end = timestamp();
+        prof[thread_id].rdtscp_se = asm_rdtscp();
+        prof[thread_id].checkpoints_previous_frame = task->checkpoints_previous_frame;
+        prof[thread_id].checkpoints_current_frame = task->checkpoints_current_frame;
+        prof[thread_id].stack = stack;
 #endif
     }
 
-    inline void prof_exec_end(uint32_t thread_id)
+    inline void prof_exec_end(uint32_t thread_id, uint64_t reached_checkpoints)
     {
 #if PROFILING
-        uint64_t rdtscp_ee = asm_rdtscp();
-        uint32_t i = profiling_i[thread_id] % PROFILING_SIZE;
-        profiling_log[thread_id][i].rdtscp_exec = rdtscp_ee - rdtscp_es[thread_id];
-        profiling_log[thread_id][i].exec_end = timestamp();
-        ++profiling_i[thread_id];
+        prof[thread_id].exec_end = timestamp();
+        prof[thread_id].rdtscp_ee = asm_rdtscp();
+        prof[thread_id].reached_checkpoints = reached_checkpoints;
+#endif
+    }
+
+    inline void prof_log(uint32_t thread_id, uint32_t iteration)
+    {
+#if PROFILING
+        uint32_t it = iteration & 0x03;
+        uint32_t i = profiling_i[it][thread_id] % PROFILING_SIZE;
+        profiling_log[it][thread_id][i].sched_start = prof[thread_id].sched_start;
+        profiling_log[it][thread_id][i].sched_end = prof[thread_id].sched_end;
+        profiling_log[it][thread_id][i].exec_end = prof[thread_id].exec_end;
+        profiling_log[it][thread_id][i].rdtscp_sched = prof[thread_id].rdtscp_se - prof[thread_id].rdtscp_ss;
+        profiling_log[it][thread_id][i].rdtscp_exec = prof[thread_id].rdtscp_ee - prof[thread_id].rdtscp_se;
+        profiling_log[it][thread_id][i].stack = prof[thread_id].stack;
+        profiling_log[it][thread_id][i].checkpoints_previous_frame = prof[thread_id].checkpoints_previous_frame;
+        profiling_log[it][thread_id][i].checkpoints_current_frame = prof[thread_id].checkpoints_current_frame;
+        profiling_log[it][thread_id][i].reached_checkpoints = prof[thread_id].reached_checkpoints;
+
+        ++profiling_i[it][thread_id];
 #endif
     }
 
@@ -257,14 +285,16 @@ namespace MTaskScheduling
 
             for (uint32_t i = 0; i < PROFILING_SIZE; ++i)
             {
-                o << profiling_log[thread][i].sched_start << " | "
-                  << profiling_log[thread][i].sched_end << " | "
-                  << profiling_log[thread][i].exec_end << " | "
-                  << profiling_log[thread][i].rdtscp_sched << " | "
-                  << profiling_log[thread][i].rdtscp_exec << " | "
-                  << profiling_log[thread][i].stack << " | "
-                  << profiling_log[thread][i].checkpoints_previous_frame << " | "
-                  << profiling_log[thread][i].checkpoints_current_frame << "\n"
+                o << std::setprecision(9)
+                  << profiling_log[0][thread][i].sched_start << " | "
+                  << profiling_log[0][thread][i].sched_end << " | "
+                  << profiling_log[0][thread][i].exec_end << " | "
+                  << profiling_log[0][thread][i].rdtscp_sched << " | "
+                  << profiling_log[0][thread][i].rdtscp_exec << " | "
+                  << profiling_log[0][thread][i].stack << " | "
+                  << profiling_log[0][thread][i].checkpoints_previous_frame << " | "
+                  << profiling_log[0][thread][i].checkpoints_current_frame << " | "
+                  << profiling_log[0][thread][i].reached_checkpoints << "\n"
                   << "\t--------------------\n";
             }
         }
