@@ -30,19 +30,6 @@ namespace MTaskScheduling
     std::atomic<uint32_t>           g_total_executed;
 
 #if PROFILING
-    typedef struct
-    {
-        double sched_start;
-        double sched_end;
-        double exec_end;
-        uint64_t rdtscp_sched;
-        uint64_t rdtscp_exec;
-        uint32_t stack;
-        uint64_t checkpoints_previous_frame;
-        uint64_t checkpoints_current_frame;
-        uint64_t reached_checkpoints;
-    } profiling_item_t;
-
     // temp storage
     struct {
         double sched_start;
@@ -237,8 +224,8 @@ namespace MTaskScheduling
     inline void prof_sched_end_exec_start(uint32_t thread_id, uint32_t stack, task_t* task)
     {
 #if PROFILING
-        prof[thread_id].sched_end = timestamp();
         prof[thread_id].rdtscp_se = asm_rdtscp();
+        prof[thread_id].sched_end = timestamp();
         prof[thread_id].checkpoints_previous_frame = task->checkpoints_previous_frame;
         prof[thread_id].checkpoints_current_frame = task->checkpoints_current_frame;
         prof[thread_id].stack = stack;
@@ -258,7 +245,7 @@ namespace MTaskScheduling
     {
 #if PROFILING
         uint32_t it = iteration & 0x03;
-        uint32_t i = profiling_i[it][thread_id] % PROFILING_SIZE;
+        uint32_t i = profiling_i[it][thread_id];
         profiling_log[it][thread_id][i].sched_start = prof[thread_id].sched_start;
         profiling_log[it][thread_id][i].sched_end = prof[thread_id].sched_end;
         profiling_log[it][thread_id][i].exec_end = prof[thread_id].exec_end;
@@ -307,7 +294,7 @@ namespace MTaskScheduling
     {
         static auto start = std::chrono::high_resolution_clock::now();
         auto now = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> diff = now - start;
+        std::chrono::duration<double, std::micro> diff = now - start;
 
         return diff.count();
     }

@@ -42,7 +42,7 @@ namespace SRendering
     VkPipeline graphics_pipeline;
 
     VkDescriptorPool descriptor_pool;
-    VkDescriptorSet descriptor_set;
+    VkDescriptorSet descriptor_sets[2];
 
     VkCommandPool command_pool;
     std::vector<VkCommandBuffer> command_buffers;
@@ -53,6 +53,11 @@ namespace SRendering
     VkBuffer index_buffer;
     VkDeviceMemory uniform_buffer_memory;
     VkBuffer uniform_buffer;
+
+    VkDeviceMemory overlay_vertex_buffer_memory;
+    VkBuffer overlay_vertex_buffer;
+    VkDeviceMemory overlay_index_buffer_memory;
+    VkBuffer overlay_index_buffer;
 
     VkSemaphore image_available_semaphore;
     VkSemaphore render_finished_semaphore;
@@ -77,6 +82,10 @@ namespace SRendering
     const uint32_t indices[num_indices] = {
         0, 1, 2, 2, 3, 0
     };
+
+    const uint32_t num_overlay_vertices = 4 * 1024; // max 1024 tasks. should be enough
+    void* mapped_overlay_vertex_buffer;
+    const uint32_t num_overlay_indices = num_overlay_vertices / 4 * 6;
 
     void init_vulkan(GLFWwindow* window)
     {
@@ -755,16 +764,27 @@ namespace SRendering
 
             vkCmdBindPipeline(command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
 
+            // draw scene
             VkBuffer vertex_buffers[] = {vertex_buffer};
             VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(command_buffers[i], 0, 1, vertex_buffers, offsets);
-
             vkCmdBindIndexBuffer(command_buffers[i], index_buffer, 0, VK_INDEX_TYPE_UINT32);
 
             vkCmdBindDescriptorSets(command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                    pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
+                                    pipeline_layout, 0, 1, &descriptor_sets[0], 0, nullptr);
 
             vkCmdDrawIndexed(command_buffers[i], num_indices, 1, 0, 0, 0);
+
+            // draw overlay
+            vertex_buffers[0] = overlay_vertex_buffer;
+            offsets[0] = 0;
+            vkCmdBindVertexBuffers(command_buffers[i], 0, 1, vertex_buffers, offsets);
+            vkCmdBindIndexBuffer(command_buffers[i], overlay_index_buffer, 0, VK_INDEX_TYPE_UINT32);
+
+            vkCmdBindDescriptorSets(command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    pipeline_layout, 0, 1, &descriptor_sets[1], 0, nullptr);
+
+            vkCmdDrawIndexed(command_buffers[i], num_overlay_indices, 1, 0, 0, 0);
 
             vkCmdEndRenderPass(command_buffers[i]);
 
@@ -775,7 +795,8 @@ namespace SRendering
 
     void create_vertex_buffer()
     {
-        VkDeviceSize buffer_size = sizeof(vertices[0]) * num_vertices;
+        // regular vertex buffer
+        VkDeviceSize buffer_size = sizeof(vertex_t) * num_vertices;
 
         VkBuffer staging_buffer;
         VkDeviceMemory staging_buffer_memory;
@@ -796,18 +817,30 @@ namespace SRendering
 
         vkDestroyBuffer(device, staging_buffer, nullptr);
         vkFreeMemory(device, staging_buffer_memory, nullptr);
+
+        // overlay vertex buffer
+        buffer_size = sizeof(vertex_t) * num_overlay_vertices;
+
+        create_buffer(buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                      &overlay_vertex_buffer, &overlay_vertex_buffer_memory);
+
+        vkMapMemory(device, overlay_vertex_buffer_memory, 0, VK_WHOLE_SIZE, 0, &mapped_overlay_vertex_buffer);
     }
 
     void create_index_buffer()
     {
         VkDeviceSize buffer_size = sizeof(indices[0]) * num_indices;
+        VkDeviceSize overlay_buffer_size = sizeof(indices[0]) * num_overlay_indices;
+        VkDeviceSize staging_buffer_size = std::max(buffer_size, overlay_buffer_size);
 
         VkBuffer staging_buffer;
         VkDeviceMemory staging_buffer_memory;
-        create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        create_buffer(staging_buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                       &staging_buffer, &staging_buffer_memory);
 
+        // regular index buffer
         void* data;
         vkMapMemory(device, staging_buffer_memory, 0, buffer_size, 0, &data);
         memcpy(data, indices, (size_t) buffer_size);
@@ -819,6 +852,30 @@ namespace SRendering
 
         copy_buffer(staging_buffer, index_buffer, buffer_size);
 
+        // overlay index buffer
+        uint32_t* overlay_indices = new uint32_t[num_overlay_indices];
+        for (uint32_t i = 0; i < num_overlay_vertices / 4; ++i)
+        {
+            overlay_indices[i * 6 + 0] = i * 4 + 0;
+            overlay_indices[i * 6 + 1] = i * 4 + 1;
+            overlay_indices[i * 6 + 2] = i * 4 + 2;
+            overlay_indices[i * 6 + 3] = i * 4 + 2;
+            overlay_indices[i * 6 + 4] = i * 4 + 3;
+            overlay_indices[i * 6 + 5] = i * 4 + 0;
+        }
+
+        vkMapMemory(device, staging_buffer_memory, 0, overlay_buffer_size, 0, &data);
+        memcpy(data, overlay_indices, (size_t) overlay_buffer_size);
+        vkUnmapMemory(device, staging_buffer_memory);
+
+        delete[] overlay_indices;
+
+        create_buffer(overlay_buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                      &overlay_index_buffer, &overlay_index_buffer_memory);
+
+        copy_buffer(staging_buffer, overlay_index_buffer, overlay_buffer_size);
+
         vkDestroyBuffer(device, staging_buffer, nullptr);
         vkFreeMemory(device, staging_buffer_memory, nullptr);
     }
@@ -826,22 +883,33 @@ namespace SRendering
     void create_uniform_buffer()
     {
         VkDeviceSize buffer_size = sizeof(ubo_transforms_t);
-        create_buffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VkDeviceSize total_buffer_size = buffer_size * 2;
+        create_buffer(total_buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                       &uniform_buffer, &uniform_buffer_memory);
+
+        ubo_transforms_t identity_transforms;
+        identity_transforms.model = glm::mat4();
+        identity_transforms.view = glm::mat4();
+        identity_transforms.projection = glm::mat4();
+
+        void* data;
+        vkMapMemory(device, uniform_buffer_memory, buffer_size, buffer_size, 0, &data);
+        memcpy(data, &identity_transforms, (size_t) buffer_size);
+        vkUnmapMemory(device, uniform_buffer_memory);
     }
 
     void create_descriptor_pool()
     {
         VkDescriptorPoolSize pool_size = {};
         pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        pool_size.descriptorCount = 1;
+        pool_size.descriptorCount = 2;
 
         VkDescriptorPoolCreateInfo pool_info = {};
         pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         pool_info.poolSizeCount = 1;
         pool_info.pPoolSizes = &pool_size;
-        pool_info.maxSets = 1;
+        pool_info.maxSets = 2;
 
         VkResult result = vkCreateDescriptorPool(device, &pool_info, nullptr, &descriptor_pool);
         assert(result == VK_SUCCESS);
@@ -849,33 +917,50 @@ namespace SRendering
 
     void create_descriptor_set()
     {
-        VkDescriptorSetLayout layouts[] = { descriptor_set_layout };
+        VkDescriptorSetLayout layouts[2] = {
+            descriptor_set_layout,
+            descriptor_set_layout,
+        };
         VkDescriptorSetAllocateInfo alloc_info = {};
         alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         alloc_info.descriptorPool = descriptor_pool;
-        alloc_info.descriptorSetCount = 1;
+        alloc_info.descriptorSetCount = 2;
         alloc_info.pSetLayouts = layouts;
 
-        VkResult result = vkAllocateDescriptorSets(device, &alloc_info, &descriptor_set);
+        VkResult result = vkAllocateDescriptorSets(device, &alloc_info, descriptor_sets);
         assert(result == VK_SUCCESS);
 
-        VkDescriptorBufferInfo buffer_info = {};
-        buffer_info.buffer = uniform_buffer;
-        buffer_info.offset = 0;
-        buffer_info.range = sizeof(ubo_transforms_t);
+        VkDescriptorBufferInfo buffer_infos[2] = {};
+        buffer_infos[0].buffer = uniform_buffer;
+        buffer_infos[0].offset = 0;
+        buffer_infos[0].range = sizeof(ubo_transforms_t);
 
-        VkWriteDescriptorSet descriptor_write = {};
-        descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_write.dstSet = descriptor_set;
-        descriptor_write.dstBinding = 0;
-        descriptor_write.dstArrayElement = 0;
-        descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptor_write.descriptorCount = 1;
-        descriptor_write.pBufferInfo = &buffer_info;
-        descriptor_write.pImageInfo = nullptr;
-        descriptor_write.pTexelBufferView = nullptr;
+        buffer_infos[1].buffer = uniform_buffer;
+        buffer_infos[1].offset = sizeof(ubo_transforms_t);
+        buffer_infos[1].range = sizeof(ubo_transforms_t);
 
-        vkUpdateDescriptorSets(device, 1, &descriptor_write, 0, nullptr);
+        VkWriteDescriptorSet descriptor_writes[2] = {};
+        descriptor_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_writes[0].dstSet = descriptor_sets[0];
+        descriptor_writes[0].dstBinding = 0;
+        descriptor_writes[0].dstArrayElement = 0;
+        descriptor_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptor_writes[0].descriptorCount = 1;
+        descriptor_writes[0].pBufferInfo = &buffer_infos[0];
+        descriptor_writes[0].pImageInfo = nullptr;
+        descriptor_writes[0].pTexelBufferView = nullptr;
+
+        descriptor_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_writes[1].dstSet = descriptor_sets[1];
+        descriptor_writes[1].dstBinding = 0;
+        descriptor_writes[1].dstArrayElement = 0;
+        descriptor_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptor_writes[1].descriptorCount = 1;
+        descriptor_writes[1].pBufferInfo = &buffer_infos[1];
+        descriptor_writes[1].pImageInfo = nullptr;
+        descriptor_writes[1].pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(device, 2, descriptor_writes, 0, nullptr);
     }
 
     void create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
@@ -1026,6 +1111,11 @@ namespace SRendering
         vkUnmapMemory(device, uniform_buffer_memory);
     }
 
+    void* get_mapped_overlay_vertex_buffer()
+    {
+        return mapped_overlay_vertex_buffer;
+    }
+
     void clear_vulkan()
     {
         vkDeviceWaitIdle(device);
@@ -1039,6 +1129,12 @@ namespace SRendering
         vkFreeMemory(device, index_buffer_memory, nullptr);
         vkDestroyBuffer(device, uniform_buffer, nullptr);
         vkFreeMemory(device, uniform_buffer_memory, nullptr);
+
+        vkUnmapMemory(device, overlay_vertex_buffer_memory);
+        vkDestroyBuffer(device, overlay_vertex_buffer, nullptr);
+        vkFreeMemory(device, overlay_vertex_buffer_memory, nullptr);
+        vkDestroyBuffer(device, overlay_index_buffer, nullptr);
+        vkFreeMemory(device, overlay_index_buffer_memory, nullptr);
 
         vkDestroyDescriptorPool(device, descriptor_pool, nullptr);
 

@@ -23,26 +23,27 @@ namespace MTaskScheduling
 
     enum scheduling_checkpoint_t : uint64_t
     {
-        SCP_NONE       = 0,
-        SCP_INPUT1     = ((uint64_t)1<<0),
-        SCP_PHYSICS1   = ((uint64_t)1<<1),
-        SCP_PHYSICS2   = ((uint64_t)1<<2),
-        SCP_PHYSICS3   = ((uint64_t)1<<3),
-        SCP_PHYSICS4   = ((uint64_t)1<<4),
-        SCP_ANIMATION1 = ((uint64_t)1<<5),
-        SCP_ANIMATION2 = ((uint64_t)1<<6),
-        SCP_ANIMATION3 = ((uint64_t)1<<7),
-        SCP_AI1        = ((uint64_t)1<<8),
-        SCP_AI2        = ((uint64_t)1<<9),
-        SCP_STREAMING1 = ((uint64_t)1<<10),
-        SCP_STREAMING2 = ((uint64_t)1<<11),
-        SCP_STREAMING3 = ((uint64_t)1<<12),
-        SCP_STREAMING4 = ((uint64_t)1<<13),
-        SCP_SOUND1     = ((uint64_t)1<<14),
-        SCP_RENDERING1 = ((uint64_t)1<<15),
-        SCP_RENDERING2 = ((uint64_t)1<<16),
-        SCP_RENDERING3 = ((uint64_t)1<<17),
-        SCP_RENDERING4 = ((uint64_t)1<<18),
+        SCP_NONE                         = 0,
+        SCP_INPUT1                       = ((uint64_t)1<<0),
+        SCP_PHYSICS1                     = ((uint64_t)1<<1),
+        SCP_PHYSICS2                     = ((uint64_t)1<<2),
+        SCP_PHYSICS3                     = ((uint64_t)1<<3),
+        SCP_PHYSICS4                     = ((uint64_t)1<<4),
+        SCP_ANIMATION1                   = ((uint64_t)1<<5),
+        SCP_ANIMATION2                   = ((uint64_t)1<<6),
+        SCP_ANIMATION3                   = ((uint64_t)1<<7),
+        SCP_AI1                          = ((uint64_t)1<<8),
+        SCP_AI2                          = ((uint64_t)1<<9),
+        SCP_STREAMING1                   = ((uint64_t)1<<10),
+        SCP_STREAMING2                   = ((uint64_t)1<<11),
+        SCP_STREAMING3                   = ((uint64_t)1<<12),
+        SCP_STREAMING4                   = ((uint64_t)1<<13),
+        SCP_SOUND1                       = ((uint64_t)1<<14),
+        SCP_RENDERING1                   = ((uint64_t)1<<15),
+        SCP_RENDERING2                   = ((uint64_t)1<<16),
+        SCP_RENDERING3                   = ((uint64_t)1<<17),
+        SCP_RENDERING_WRITE_PERF_OVERLAY = ((uint64_t)1<<18),
+        SCP_RENDERING_PRESENT            = ((uint64_t)1<<19),
     };
 
     typedef struct
@@ -58,6 +59,25 @@ namespace MTaskScheduling
     extern ALIGN(64) std::atomic<uint32_t> s_iterations[NUM_STACKS];
     extern std::atomic<uint32_t>           g_quit_request;
     extern std::atomic<uint32_t>           g_total_executed;
+
+#if PROFILING
+    typedef struct
+    {
+        double sched_start;
+        double sched_end;
+        double exec_end;
+        uint64_t rdtscp_sched;
+        uint64_t rdtscp_exec;
+        uint32_t stack;
+        uint64_t checkpoints_previous_frame;
+        uint64_t checkpoints_current_frame;
+        uint64_t reached_checkpoints;
+    } profiling_item_t;
+
+    extern uint32_t profiling_i[4][PROFILING_THREADS];
+    extern profiling_item_t profiling_log[4][PROFILING_THREADS][PROFILING_SIZE];
+#endif
+
 
     void init_scheduler();
     void worker_thread(uint32_t);

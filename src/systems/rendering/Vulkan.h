@@ -46,6 +46,7 @@ namespace SRendering
         glm::mat4 model;
         glm::mat4 view;
         glm::mat4 projection;
+        glm::mat4 padding;
     } ubo_transforms_t;
 
     typedef struct queue_family_indices_t
@@ -122,4 +123,5 @@ namespace SRendering
 
     void draw_frame();
     void update_transforms(float);
+    void* get_mapped_overlay_vertex_buffer();
 }

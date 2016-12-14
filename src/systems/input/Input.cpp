@@ -88,7 +88,7 @@ namespace SInput
 
         task.execute = input_task;
         task.args = nullptr;
-        task.checkpoints_previous_frame = MTaskScheduling::SCP_RENDERING4;
+        task.checkpoints_previous_frame = MTaskScheduling::SCP_RENDERING_PRESENT;
         task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
         ++stack_size;
         MTaskScheduling::s_stacks[system_id][stack_size] = task;

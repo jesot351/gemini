@@ -40,5 +40,16 @@ namespace SRendering
     } task_group3_args_t;
     uint64_t task_group3(void*, uint32_t);
 
+    typedef struct
+    {
+        uint32_t thread_log;
+        uint32_t iteration;
+        std::atomic<double>* start_time;
+        void* buffer_memory;
+        std::atomic<uint32_t>* write_offset;
+        std::atomic<uint32_t>* counter;
+    } write_perf_overlay_task_args_t;
+    uint64_t write_perf_overlay_task(void* args, uint32_t thread_id);
+
     uint64_t present_task(void*, uint32_t);
 }
