@@ -83,7 +83,7 @@ namespace SAI
 
     uint64_t independent_task(void* args, uint32_t thread_id)
     {
-        usleep(100);
+        MTaskScheduling::simulate_work();
 
         return MTaskScheduling::SCP_NONE;
     }
@@ -92,7 +92,7 @@ namespace SAI
     {
         task_group1_args_t* pargs = (task_group1_args_t*) args;
 
-        usleep(100);
+        MTaskScheduling::simulate_work();
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
         uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
@@ -106,7 +106,7 @@ namespace SAI
     {
         task_group2_args_t* pargs = (task_group2_args_t*) args;
 
-        usleep(100);
+        MTaskScheduling::simulate_work();
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
         uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;

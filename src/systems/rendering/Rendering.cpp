@@ -102,7 +102,6 @@ namespace SRendering
             MTaskScheduling::s_stacks[system_id][stack_size] = task;
         }
 
-        /*
         // 4 independent tasks
         for (uint32_t i = 0; i < 4; ++i)
         {
@@ -116,7 +115,6 @@ namespace SRendering
             task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
             MTaskScheduling::s_stacks[system_id][stack_size] = task;
         }
-        */
 
         // 10 tasks in task group 2
         num_executed_group2.store(9, std::memory_order_relaxed);
@@ -133,7 +131,6 @@ namespace SRendering
             MTaskScheduling::s_stacks[system_id][stack_size] = task;
         }
 
-        /*
         // 4 independent tasks
         for (uint32_t i = 0; i < 4; ++i)
         {
@@ -147,7 +144,6 @@ namespace SRendering
             task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
             MTaskScheduling::s_stacks[system_id][stack_size] = task;
         }
-        */
 
         // 10 tasks in task group 1
         num_executed_group1.store(9, std::memory_order_relaxed);
@@ -164,7 +160,6 @@ namespace SRendering
             MTaskScheduling::s_stacks[system_id][stack_size] = task;
         }
 
-        /*
         // 4 independent tasks
         for (uint32_t i = 0; i < 4; ++i)
         {
@@ -178,7 +173,6 @@ namespace SRendering
             task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
             MTaskScheduling::s_stacks[system_id][stack_size] = task;
         }
-        */
 
         MTaskScheduling::s_stack_sizes[system_id].store((MTaskScheduling::s_iterations[system_id] << 7) | stack_size, std::memory_order_release);
 
@@ -187,7 +181,7 @@ namespace SRendering
 
     uint64_t independent_task(void* args, uint32_t thread_id)
     {
-        usleep(100);
+        MTaskScheduling::simulate_work();
 
         return MTaskScheduling::SCP_NONE;
     }
@@ -196,7 +190,7 @@ namespace SRendering
     {
         task_group1_args_t* pargs = (task_group1_args_t*) args;
 
-        usleep(100);
+        MTaskScheduling::simulate_work();
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
         uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
@@ -210,7 +204,7 @@ namespace SRendering
     {
         task_group2_args_t* pargs = (task_group2_args_t*) args;
 
-        usleep(100);
+        MTaskScheduling::simulate_work();
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
         uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
@@ -224,7 +218,7 @@ namespace SRendering
     {
         task_group3_args_t* pargs = (task_group3_args_t*) args;
 
-        usleep(100);
+        MTaskScheduling::simulate_work();
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
         uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
@@ -270,12 +264,12 @@ namespace SRendering
             float t = start_offset_y + thread_log * (lane_margin + lane_height);
             float b = t + lane_height;
 
-            glm::vec3 stack_colors[] = {
-                {0.0f, 0.8f, 0.0f},
-                {0.0f, 0.8f, 1.0f},
-                {1.0f, 1.0f, 0.0f},
-                {1.0f, 0.8f, 0.0f},
-                {1.0f, 0.2f, 0.0f},
+            const static glm::vec3 stack_colors[] = {
+                {0.9176f       , 0.6000f / 2.0f, 0.6000f / 2.0f},
+                {0.6235f / 4.0f, 0.7725f / 2.0f, 0.9098f       },
+                {0.7137f / 2.0f, 0.8431f       , 0.6588f / 2.0f},
+                {1.0000f       , 0.8980f       , 0.6000f / 2.0f},
+                {0.7059f       , 0.6549f / 2.0f, 0.8392f       },
             };
 
             double total_sched_time = 0;
@@ -316,14 +310,6 @@ namespace SRendering
                 std::cout << "Scheduling overhead: " << total_sched_time / total_exec_time << "\n";
                 std::cout << "Scheduling clock cycles: " << total_sched_clock_cycles / num_logged_items << "\n";
             }
-
-            /*
-            float offset = thread_log * 0.15f;
-            overlay_vertices[0] = {{offset + -0.9f, -0.9f}, {1.0f, 0.0f, 0.0f}};
-            overlay_vertices[1] = {{offset + -0.9f, -0.8f}, {0.0f, 0.0f, 1.0f}};
-            overlay_vertices[2] = {{offset + -0.8f, -0.8f}, {1.0f, 1.0f, 0.0f}};
-            overlay_vertices[3] = {{offset + -0.8f, -0.9f}, {0.0f, 1.0f, 0.0f}};
-            */
         }
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);

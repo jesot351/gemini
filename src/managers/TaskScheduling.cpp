@@ -20,6 +20,7 @@ using namespace MPlatform;
 
 namespace MTaskScheduling
 {
+    uint32_t NUM_WORKER_THREADS;
 
     ALIGN(64) task_t                s_stacks[NUM_STACKS][STACK_SIZE];
     ALIGN(64) std::atomic<uint32_t> s_stack_sizes[NUM_STACKS];
@@ -209,6 +210,18 @@ namespace MTaskScheduling
         uint32_t s = (uint64_t)args;
         std::cout << s << " " << s_iterations[s] << std::endl;
         return SCP_NONE;
+    }
+
+    uint64_t simulate_work(uint32_t amount)
+    {
+        uint64_t ret = 0;
+
+        for (uint32_t i = 0; i < amount; ++i)
+        {
+            ret += asm_rdtscp();
+        }
+
+        return ret;
     }
 
 

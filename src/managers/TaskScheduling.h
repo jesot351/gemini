@@ -14,7 +14,7 @@ namespace MTaskScheduling
     const uint32_t NUM_STACKS             = 16;
     const uint32_t NUM_ACTIVE_STACKS      = 5;
     const uint32_t STACK_SIZE             = 128;
-    const uint32_t NUM_WORKER_THREADS     = MPlatform::NUM_HARDWARE_THREADS;
+    extern uint32_t NUM_WORKER_THREADS;//     = MPlatform::NUM_HARDWARE_THREADS;
     const uint32_t MAX_NUM_WORKER_THREADS = 32;
 #if PROFILING
     const uint32_t PROFILING_THREADS      = 8;
@@ -82,6 +82,7 @@ namespace MTaskScheduling
     void init_scheduler();
     void worker_thread(uint32_t);
     uint64_t dont_do_it(void*, uint32_t);
+    uint64_t simulate_work(uint32_t amount = 10e3);
 
     // profiling functions
     void prof_sched_start(uint32_t);

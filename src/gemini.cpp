@@ -15,6 +15,12 @@
 
 int main()
 {
+    // Determine number of worker threads
+    uint32_t num_threads;
+    std::cout << "Number of worker threads: ";
+    std::cin >> num_threads;
+    MTaskScheduling::NUM_WORKER_THREADS = num_threads;
+
     // Initialize managers
     MMemory::init_memory();
     MTaskScheduling::init_scheduler();
@@ -33,9 +39,6 @@ int main()
     SRendering::init_rendering(4, window);
 
     // Launch worker threads
-    uint32_t num_threads = MTaskScheduling::NUM_WORKER_THREADS;
-    std::cout << "num threads: " << num_threads << "\n";
-
     std::thread workers[MTaskScheduling::MAX_NUM_WORKER_THREADS];
     for (uint32_t i = 0; i < num_threads; ++i)
     {
