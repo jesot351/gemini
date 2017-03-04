@@ -21,41 +21,48 @@ namespace MTaskScheduling
     const uint32_t PROFILING_SIZE         = 256;
 #endif
 
-    enum scheduling_checkpoint_t : uint64_t
+    enum execution_checkpoint_t : uint64_t
     {
-        SCP_NONE                         = 0,
-        SCP_INPUT1                       = ((uint64_t)1<<0),
-        SCP_PHYSICS1                     = ((uint64_t)1<<1),
-        SCP_PHYSICS2                     = ((uint64_t)1<<2),
-        SCP_PHYSICS3                     = ((uint64_t)1<<3),
-        SCP_PHYSICS4                     = ((uint64_t)1<<4),
-        SCP_ANIMATION1                   = ((uint64_t)1<<5),
-        SCP_ANIMATION2                   = ((uint64_t)1<<6),
-        SCP_ANIMATION3                   = ((uint64_t)1<<7),
-        SCP_AI1                          = ((uint64_t)1<<8),
-        SCP_AI2                          = ((uint64_t)1<<9),
-        SCP_STREAMING1                   = ((uint64_t)1<<10),
-        SCP_STREAMING2                   = ((uint64_t)1<<11),
-        SCP_STREAMING3                   = ((uint64_t)1<<12),
-        SCP_STREAMING4                   = ((uint64_t)1<<13),
-        SCP_SOUND1                       = ((uint64_t)1<<14),
-        SCP_RENDERING1                   = ((uint64_t)1<<15),
-        SCP_RENDERING2                   = ((uint64_t)1<<16),
-        SCP_RENDERING3                   = ((uint64_t)1<<17),
-        SCP_RENDERING_WRITE_PERF_OVERLAY = ((uint64_t)1<<18),
-        SCP_RENDERING_PRESENT            = ((uint64_t)1<<19),
+        ECP_NONE                         = 0,
+        ECP_INPUT1                       = ((uint64_t)1<<0),
+        ECP_PHYSICS1                     = ((uint64_t)1<<1),
+        ECP_PHYSICS2                     = ((uint64_t)1<<2),
+        ECP_PHYSICS3                     = ((uint64_t)1<<3),
+        ECP_PHYSICS4                     = ((uint64_t)1<<4),
+        ECP_ANIMATION1                   = ((uint64_t)1<<5),
+        ECP_ANIMATION2                   = ((uint64_t)1<<6),
+        ECP_ANIMATION3                   = ((uint64_t)1<<7),
+        ECP_AI1                          = ((uint64_t)1<<8),
+        ECP_AI2                          = ((uint64_t)1<<9),
+        ECP_STREAMING1                   = ((uint64_t)1<<10),
+        ECP_STREAMING2                   = ((uint64_t)1<<11),
+        ECP_STREAMING3                   = ((uint64_t)1<<12),
+        ECP_STREAMING4                   = ((uint64_t)1<<13),
+        ECP_SOUND1                       = ((uint64_t)1<<14),
+        ECP_RENDERING1                   = ((uint64_t)1<<15),
+        ECP_RENDERING2                   = ((uint64_t)1<<16),
+        ECP_RENDERING3                   = ((uint64_t)1<<17),
+        ECP_RENDERING_WRITE_PERF_OVERLAY = ((uint64_t)1<<18),
+        ECP_RENDERING_PRESENT            = ((uint64_t)1<<19),
     };
 
-    typedef struct
+    typedef struct task_t
     {
         uint64_t (*execute)(void*, uint32_t);
         void* args;
         uint64_t checkpoints_previous_frame;
         uint64_t checkpoints_current_frame;
-    } ALIGN(16) task_t;
+    } task_t;
 
-    extern ALIGN(64) task_t                s_stacks[NUM_STACKS][STACK_SIZE];
-    extern ALIGN(64) std::atomic<uint32_t> s_stack_sizes[NUM_STACKS];
+    typedef struct task_stack_t
+    {
+        uint32_t index;
+        uint32_t unpublished_size;
+        std::atomic<uint64_t> iterations_size; // pack to guarantee conformity
+        ALIGN(32) task_t tasks[STACK_SIZE];
+    } ALIGN(64) task_stack_t;
+
+    extern ALIGN(64) task_stack_t*         s_stacks;
     extern ALIGN(64) std::atomic<uint32_t> s_iterations[NUM_STACKS];
     extern std::atomic<uint32_t>           g_quit_request;
     extern std::atomic<uint32_t>           g_total_executed;
@@ -80,9 +87,28 @@ namespace MTaskScheduling
 
 
     void init_scheduler();
+    void clear_scheduler();
     void worker_thread(uint32_t);
     uint64_t dont_do_it(void*, uint32_t);
     uint64_t simulate_work(uint32_t amount = 10e3);
+
+    inline void begin_task_recording(task_stack_t* stack)
+    {
+        stack->unpublished_size = 1;
+    };
+
+    inline void record_task(task_stack_t* stack, task_t task)
+    {
+        stack->tasks[stack->unpublished_size] = task;
+        ++stack->unpublished_size;
+    }
+
+    inline void submit_task_recording(task_stack_t* stack)
+    {
+        // pack to guarantee conformity between num stack iterations and stack size
+        uint64_t iterations_size = (uint64_t) s_iterations[stack->index] << 32 | (stack->unpublished_size - 1);
+        stack->iterations_size.store(iterations_size, std::memory_order_release);
+    }
 
     // profiling functions
     void prof_sched_start(uint32_t);

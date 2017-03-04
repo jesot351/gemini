@@ -1,15 +1,16 @@
 #pragma once
 
+#include "managers/TaskScheduling.h"
 #include "managers/Memory.h"
 
 #include <atomic>
 
 namespace SAI
 {
-    extern uint32_t system_id;
+    extern MTaskScheduling::task_stack_t* task_stack;
     extern MMemory::LinearAllocator32kb task_args_memory;
 
-    void init_ai(uint32_t);
+    void init_ai(MTaskScheduling::task_stack_t*);
 
     uint64_t submit_tasks(void*, uint32_t);
 

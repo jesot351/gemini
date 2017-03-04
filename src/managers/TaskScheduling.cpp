@@ -22,8 +22,7 @@ namespace MTaskScheduling
 {
     uint32_t NUM_WORKER_THREADS;
 
-    ALIGN(64) task_t                s_stacks[NUM_STACKS][STACK_SIZE];
-    ALIGN(64) std::atomic<uint32_t> s_stack_sizes[NUM_STACKS];
+    ALIGN(64) task_stack_t*         s_stacks;
     ALIGN(64) std::atomic<uint32_t> s_iterations[NUM_STACKS];
     std::atomic<uint64_t>           s_pri_mask_main_stack;
     std::atomic<uint64_t>           s_checkpoints[2];
@@ -50,26 +49,19 @@ namespace MTaskScheduling
     profiling_item_t profiling_log[4][PROFILING_THREADS][PROFILING_SIZE];
 #endif
 
-    ALIGN(64) const uint32_t range_16[16]       = {          0,          1,          2,          3,
-                                                             4,          5,          6,          7,
-                                                             8,          9,         10,         11,
-                                                            12,         13,         14,         15 };
-
-    ALIGN(64) const uint32_t iteration_mask[16] = { 0x00800000, 0x00800000, 0x00800000, 0x00800000,
-                                                    0x00008000, 0x00008000, 0x00008000, 0x00008000,
-                                                    0x00000080, 0x00000080, 0x00000080, 0x00000080,
-                                                    0x0F0B0703, 0x0E0A0602, 0x0D090501, 0x0C080400 };
-
     void init_scheduler()
     {
-        for (uint32_t stack = 0; stack < NUM_STACKS; ++stack)
+        s_stacks = new task_stack_t[NUM_STACKS];
+
+        for (uint32_t i = 0; i < NUM_STACKS; ++i)
         {
-            s_stacks[stack][0]  = { dont_do_it, (void*)(uint64_t) stack, SCP_NONE, SCP_NONE };
+            s_stacks[i].index = i;
+            s_stacks[i].tasks[0]  = { dont_do_it, (void*)(uint64_t) i, ECP_NONE, ECP_NONE };
         }
 
-        for (uint32_t inactive_stack = NUM_ACTIVE_STACKS; inactive_stack < NUM_STACKS; ++inactive_stack)
+        for (uint32_t i = NUM_ACTIVE_STACKS; i < NUM_STACKS; ++i)
         {
-            s_iterations[inactive_stack]  = 0x7FFFFFFF; // max int32 because SSE
+            s_iterations[i].store(0x7FFFFFFF, std::memory_order_relaxed); // max int32 because SSE
         }
 
         s_pri_mask_main_stack.store((1<<NUM_ACTIVE_STACKS)-1, std::memory_order_relaxed); // all stacks allowed, main_stack 0
@@ -77,59 +69,77 @@ namespace MTaskScheduling
         s_checkpoints[1].store(0xFFFFFFFFFFFFFFFF, std::memory_order_relaxed); // all passed in frame -1
     }
 
+    void clear_scheduler()
+    {
+        delete[] s_stacks;
+    }
+
     void worker_thread(uint32_t thread_id)
     {
         timestamp();
         prof_sched_start(thread_id);
 
-        uint32_t s = 0;
-        uint32_t ss = 0;
+        uint32_t stack = 0;
+        uint32_t stack_size = 0;
+        uint64_t iterations_size = 0;
+        uint32_t iteration = 0;
 
         while (!g_quit_request.load(std::memory_order_relaxed))
         {
             uint64_t pri_mask_main_stack = s_pri_mask_main_stack.load(std::memory_order_acquire);
             uint32_t main_stack = (uint32_t) (pri_mask_main_stack>>32);
-            uint32_t m = (uint32_t) pri_mask_main_stack;
+            uint32_t pri_mask = (uint32_t) pri_mask_main_stack;
 
             task_t task;
 
             uint64_t c;
-            uint32_t k = asm_bsr32( ( ((uint32_t) ((ss >> 7) == s_iterations[s].load(std::memory_order_relaxed)) << (s - main_stack) % 32) | 1 ) & m);
-            uint32_t next_pri = (k + main_stack) % 32;
-            m &= ~(1 << k);
+            // previous stack has highest priority. main stack is allways allowed to run
+            uint32_t previous_stack_allowed = (uint32_t) (iteration == s_iterations[stack].load(std::memory_order_relaxed));
+            uint32_t previous_stack_bit = previous_stack_allowed << (stack - main_stack) % 32;
+            uint32_t main_stack_bit = 1;
+            uint32_t main_stack_offset = asm_bsr32( (previous_stack_bit | main_stack_bit) & pri_mask );
+            uint32_t next_pri = (main_stack_offset + main_stack) % 32;
+            pri_mask &= ~(1 << main_stack_offset);
             do
             {
-                s = next_pri;
+                stack = next_pri;
 
-                ss = s_stack_sizes[s].load(std::memory_order_acquire);
-                task = s_stacks[s][ss & 0x0000007F];
+                iterations_size = s_stacks[stack].iterations_size.load(std::memory_order_acquire);
+                iteration = (uint32_t) (iterations_size >> 32);
+                stack_size = (uint32_t) iterations_size;
+                task = s_stacks[stack].tasks[stack_size];
 
-                uint64_t current_frame = ss >> 7;
+                // check if all required checkpoints are reached
+                uint64_t current_frame = iteration;
                 uint64_t previous_frame = current_frame - 1;
-                uint64_t scp_current_frame = s_checkpoints[current_frame & 1].load(std::memory_order_acquire);
-                uint64_t scp_previous_frame = s_checkpoints[previous_frame & 1].load(std::memory_order_acquire);
-                c  = task.checkpoints_current_frame - ((scp_current_frame ^ (((current_frame >> 1) & 1) - 1)) & task.checkpoints_current_frame);
-                c |= task.checkpoints_previous_frame - ((scp_previous_frame ^ (((previous_frame >> 1) & 1) - 1)) & task.checkpoints_previous_frame);
-                c |= (uint64_t) (ss & 0x0000007F) == 0; // this should be handled with dont_do_it tasks
+                uint64_t ecp_current_frame = s_checkpoints[current_frame & 1].load(std::memory_order_acquire);
+                uint64_t ecp_previous_frame = s_checkpoints[previous_frame & 1].load(std::memory_order_acquire);
+                c  = task.checkpoints_current_frame - ((ecp_current_frame ^ (((current_frame >> 1) & 1) - 1)) & task.checkpoints_current_frame);
+                c |= task.checkpoints_previous_frame - ((ecp_previous_frame ^ (((previous_frame >> 1) & 1) - 1)) & task.checkpoints_previous_frame);
+                c |= (uint64_t) stack_size == 0; // this should be handled with dont_do_it tasks
 
                 if (c)
                 {
-                    if (!m) // only happens when we run out of ready tasks
+                    if (!pri_mask)
                     {
+                        // all top tasks are blocked by dependencies
+                        // reload priority mask and try again (a blocking task might have finished)
                         pri_mask_main_stack = s_pri_mask_main_stack.load(std::memory_order_acquire);
-                        m = (uint32_t) pri_mask_main_stack;
                         main_stack = (uint32_t) (pri_mask_main_stack>>32);
+                        pri_mask = (uint32_t) pri_mask_main_stack;
                     }
-                    k = asm_bsf32(m);
-                    next_pri = (k + main_stack) % 32;
-                    m &= ~(1 << k);
+                    // task is blocked. try another stack
+                    main_stack_offset = asm_bsf32(pri_mask);
+                    next_pri = (main_stack_offset + main_stack) % 32;
+                    pri_mask &= ~(1 << main_stack_offset);
                 }
 
-            } while ( c || !s_stack_sizes[s].compare_exchange_weak(ss, ss - 1, std::memory_order_acq_rel) );
+            } while ( c || !s_stacks[stack].iterations_size.compare_exchange_weak(iterations_size, iterations_size - 1, std::memory_order_acq_rel) );
 
-            if ((ss & 0x0000007F) == 1)
+            if (stack_size == 1)
             {
-                s_iterations[s].fetch_add(1, std::memory_order_relaxed);
+                // we picked the last task. update priority mask
+                s_iterations[stack].fetch_add(1, std::memory_order_relaxed);
 
                 uint64_t old_pri_mask_main_stack = s_pri_mask_main_stack.load(std::memory_order_relaxed);
                 uint64_t new_pri_mask_main_stack = 0;
@@ -143,6 +153,14 @@ namespace MTaskScheduling
                     __m128i i1 = _mm_load_si128((__m128i*) &s_iterations[4]);
                     __m128i i2 = _mm_load_si128((__m128i*) &s_iterations[8]);
                     __m128i i3 = _mm_load_si128((__m128i*) &s_iterations[12]);
+
+                    ALIGN(64) static const uint32_t range_16[16] =
+                        {
+                            0,  1,  2,  3,
+                            4,  5,  6,  7,
+                            8,  9, 10, 11,
+                            12, 13, 14, 15
+                        };
 
                             i0 = _mm_add_epi32(i0, _mm_cmpgt_epi32(ms, _mm_load_si128((__m128i*) &range_16[0])));
                             i1 = _mm_add_epi32(i1, _mm_cmpgt_epi32(ms, _mm_load_si128((__m128i*) &range_16[4])));
@@ -163,32 +181,48 @@ namespace MTaskScheduling
                     __m128i c2 = _mm_cmpeq_epi32(i2, l0);
                     __m128i c3 = _mm_cmpeq_epi32(i3, l0);
 
+                    ALIGN(64) static const uint32_t iteration_mask[16] =
+                        {
+                            0x00800000, 0x00800000, 0x00800000, 0x00800000,
+                            0x00008000, 0x00008000, 0x00008000, 0x00008000,
+                            0x00000080, 0x00000080, 0x00000080, 0x00000080,
+                            0x0F0B0703, 0x0E0A0602, 0x0D090501, 0x0C080400
+                        };
+
                     __m128i  c = _mm_blendv_epi8(c0, c1, _mm_load_si128((__m128i*) &iteration_mask[0]));
                              c = _mm_blendv_epi8(c , c2, _mm_load_si128((__m128i*) &iteration_mask[4]));
                              c = _mm_blendv_epi8(c , c3, _mm_load_si128((__m128i*) &iteration_mask[8]));
                              c = _mm_shuffle_epi8(c, _mm_load_si128((__m128i*) &iteration_mask[12]));
 
+                    // mask of stacks allowed to run
                     uint32_t m = _mm_movemask_epi8(c);
+                    // rotate mask so that main stack is in bit 0
                              m = (m >> main_stack) | (m << (32 - main_stack));
-                             k = asm_bsf32(m);
+                    // offset to new main stack (0 if old main stack is still allowed)
+                    uint32_t k = asm_bsf32(m);
                     uint32_t old_main_stack = main_stack;
+                    // new main stack
                     main_stack = (k + main_stack) % 32;
+                    // rotate mask so that new main stack is in bit 0
                              m = (m >> k) | (m << (32 - k));
+                    // stacks in range [old_main_stack, main_stack) are
+                    // guaranteed to be allowed to run (starting their next frame)
                              m = m | ~( (uint32_t) ((uint64_t) 1 << (32 - (main_stack - old_main_stack) % 32)) - 1 );
                     uint32_t active_stack_mask = (1 << NUM_ACTIVE_STACKS) - 1;
+                    // but make sure to zero all bits belonging to inactive stacks (32b bit-field)
                              m = m & ( (active_stack_mask >> main_stack) | (active_stack_mask << (32 - main_stack)) );
 
-                    // pack to guarantee conformity between pri mask and main stack
+                    // pack to guarantee conformity between priority mask and main stack
                     new_pri_mask_main_stack = (uint64_t) main_stack << 32 | m;
                 } while (!s_pri_mask_main_stack.compare_exchange_weak(old_pri_mask_main_stack, new_pri_mask_main_stack, std::memory_order_acq_rel));
             }
 
-            prof_sched_end_exec_start(thread_id, s, &task);
+            prof_sched_end_exec_start(thread_id, stack, &task);
 
             uint64_t reached_checkpoints = task.execute(task.args, thread_id);
 
             prof_exec_end(thread_id, reached_checkpoints);
-            prof_log(thread_id, (ss >> 7));
+            prof_log(thread_id, iteration);
 
             if (g_total_executed.fetch_add(1, std::memory_order_relaxed) == 10000000)
             {
@@ -199,7 +233,7 @@ namespace MTaskScheduling
 
             if (reached_checkpoints) // branch to avoid unnecessary lock instruction
             {
-                s_checkpoints[(ss >> 7) & 1].fetch_xor(reached_checkpoints, std::memory_order_release);
+                s_checkpoints[iteration & 1].fetch_xor(reached_checkpoints, std::memory_order_release);
             }
         }
     }
@@ -209,7 +243,7 @@ namespace MTaskScheduling
         std::cout << "DONT DO IT !!!!" << std::endl;
         uint32_t s = (uint64_t)args;
         std::cout << s << " " << s_iterations[s] << std::endl;
-        return SCP_NONE;
+        return ECP_NONE;
     }
 
     uint64_t simulate_work(uint32_t amount)
