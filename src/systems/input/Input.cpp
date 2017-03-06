@@ -11,9 +11,11 @@
 
 #include <GLFW/glfw3.h>
 
+using namespace MTaskScheduling;
+
 namespace SInput
 {
-    uint32_t system_id;
+    task_stack_t* task_stack;
     MMemory::LinearAllocator32kb task_args_memory;
     input_loop_sync_t input_loop_sync;
 
@@ -21,9 +23,9 @@ namespace SInput
     uint32_t num_events[NUM_KEY_STATES];
     const uint32_t max_num_events[NUM_KEY_STATES] = {8, 8, 1, 8};
 
-    void init_input(uint32_t assigned_system_id)
+    void init_input(task_stack_t* assigned_task_stack)
     {
-        system_id = assigned_system_id;
+        task_stack = assigned_task_stack;
         task_args_memory.Init();
         submit_tasks(nullptr, 0);
     }
@@ -77,25 +79,14 @@ namespace SInput
     {
         task_args_memory.Clear();
 
-        MTaskScheduling::task_t task;
+        begin_task_recording(task_stack);
 
-        task.execute = submit_tasks;
-        task.args = nullptr;
-        task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-        task.checkpoints_current_frame = MTaskScheduling::SCP_INPUT1;
-        uint32_t stack_size = 1;
-        MTaskScheduling::s_stacks[system_id][stack_size] = task;
+        record_task(task_stack, {submit_tasks, nullptr, ECP_NONE, ECP_INPUT1});
+        record_task(task_stack, {input_task, nullptr, ECP_RENDERING_PRESENT, ECP_NONE});
 
-        task.execute = input_task;
-        task.args = nullptr;
-        task.checkpoints_previous_frame = MTaskScheduling::SCP_RENDERING_PRESENT;
-        task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
-        ++stack_size;
-        MTaskScheduling::s_stacks[system_id][stack_size] = task;
+        submit_task_recording(task_stack);
 
-        MTaskScheduling::s_stack_sizes[system_id].store((MTaskScheduling::s_iterations[system_id] << 7) | stack_size, std::memory_order_release);
-
-        return MTaskScheduling::SCP_NONE;
+        return ECP_NONE;
     }
 
     uint64_t input_task(void* args, uint32_t thread_id)
@@ -153,6 +144,6 @@ namespace SInput
         if (key_pressed(GLFW_KEY_ESCAPE))
             signal_shutdown();
 
-        return MTaskScheduling::SCP_INPUT1;
+        return ECP_INPUT1;
     }
 }

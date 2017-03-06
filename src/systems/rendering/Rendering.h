@@ -1,17 +1,19 @@
 #pragma once
 
+#include "managers/TaskScheduling.h"
 #include "managers/Memory.h"
 
 #include <atomic>
 
+// forward declarations
 struct GLFWwindow;
 
 namespace SRendering
 {
-    extern uint32_t system_id;
+    extern MTaskScheduling::task_stack_t* task_stack;
     extern MMemory::LinearAllocator32kb task_args_memory;
 
-    void init_rendering(uint32_t, GLFWwindow*);
+    void init_rendering(MTaskScheduling::task_stack_t*, GLFWwindow*);
     void clear_rendering();
 
     uint64_t submit_tasks(void*, uint32_t);

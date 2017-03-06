@@ -9,16 +9,18 @@
 #include <iostream>
 #include <chrono>
 
+using namespace MTaskScheduling;
+
 struct GLFWwindow;
 
 namespace SRendering
 {
-    uint32_t system_id;
+    task_stack_t* task_stack;
     MMemory::LinearAllocator32kb task_args_memory;
 
-    void init_rendering(uint32_t assigned_system_id, GLFWwindow* window)
+    void init_rendering(task_stack_t* assigned_task_stack, GLFWwindow* window)
     {
-        system_id = assigned_system_id;
+        task_stack = assigned_task_stack;
 
         init_vulkan(window);
 
@@ -43,47 +45,26 @@ namespace SRendering
     {
         task_args_memory.Clear();
 
-        uint32_t stack_size = 1;
-        MTaskScheduling::task_t task;
+        begin_task_recording(task_stack);
 
-        // submit new tasks
-        {
-            task.execute = submit_tasks;
-            task.args = nullptr;
-            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_RENDERING_PRESENT;
-            MTaskScheduling::s_stacks[system_id][stack_size] = task;
-        }
-
-        // present task
-        {
-            ++stack_size;
-            task.execute = present_task;
-            task.args = nullptr;
-            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_RENDERING_WRITE_PERF_OVERLAY;
-            MTaskScheduling::s_stacks[system_id][stack_size] = task;
-        }
+        record_task(task_stack, {submit_tasks, nullptr, ECP_NONE, ECP_RENDERING_PRESENT});
+        record_task(task_stack, {present_task, nullptr, ECP_NONE, ECP_RENDERING_WRITE_PERF_OVERLAY});
 
         // performance overlay task
-        num_executed_perf_overlay.store(MTaskScheduling::NUM_WORKER_THREADS - 1, std::memory_order_relaxed);
+        num_executed_perf_overlay.store(NUM_WORKER_THREADS - 1, std::memory_order_relaxed);
         perf_overlay_start_time.store(0, std::memory_order_relaxed);
         perf_overlay_write_offset.store(0, std::memory_order_relaxed);
-        for (uint32_t i = 0; i < MTaskScheduling::NUM_WORKER_THREADS; ++i)
+        for (uint32_t i = 0; i < NUM_WORKER_THREADS; ++i)
         {
-            ++stack_size;
-            task.execute = write_perf_overlay_task;
             write_perf_overlay_task_args_t* args =  new(task_args_memory) write_perf_overlay_task_args_t;
             args->thread_log = i;
-            args->iteration = MTaskScheduling::s_iterations[system_id];
+            args->iteration = s_iterations[task_stack->index];
             args->start_time = &perf_overlay_start_time;
             args->buffer_memory = get_mapped_overlay_vertex_buffer();
             args->write_offset = &perf_overlay_write_offset;
             args->counter = &num_executed_perf_overlay;
-            task.args = args;
-            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_RENDERING3;
-            MTaskScheduling::s_stacks[system_id][stack_size] = task;
+
+            record_task(task_stack, {write_perf_overlay_task, args, ECP_NONE, ECP_RENDERING3});
         }
 
 
@@ -91,111 +72,81 @@ namespace SRendering
         num_executed_group3.store(9, std::memory_order_relaxed);
         for (uint32_t i = 0; i < 10; ++i)
         {
-            ++stack_size;
-            MTaskScheduling::task_t task;
-            task.execute = task_group3;
             task_group3_args_t* args = new(task_args_memory) task_group3_args_t;
             args->counter = &num_executed_group3;
-            task.args = args;
-            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_RENDERING2;
-            MTaskScheduling::s_stacks[system_id][stack_size] = task;
+
+            record_task(task_stack, {task_group3, args, ECP_NONE, ECP_RENDERING2});
         }
 
         // 4 independent tasks
         for (uint32_t i = 0; i < 4; ++i)
         {
-            ++stack_size;
-            MTaskScheduling::task_t task;
-            task.execute = independent_task;
             independent_task_args_t* args = new(task_args_memory) independent_task_args_t;
             args->some_param = 42 - i;
-            task.args = args;
-            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
-            MTaskScheduling::s_stacks[system_id][stack_size] = task;
+
+            record_task(task_stack, {independent_task, args, ECP_NONE, ECP_NONE});
         }
 
         // 10 tasks in task group 2
         num_executed_group2.store(9, std::memory_order_relaxed);
         for (uint32_t i = 0; i < 10; ++i)
         {
-            ++stack_size;
-            MTaskScheduling::task_t task;
-            task.execute = task_group2;
             task_group2_args_t* args = new(task_args_memory) task_group2_args_t;
             args->counter = &num_executed_group2;
-            task.args = args;
-            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_PHYSICS4 | MTaskScheduling::SCP_RENDERING1;
-            MTaskScheduling::s_stacks[system_id][stack_size] = task;
+
+            record_task(task_stack, {task_group2, args, ECP_NONE, ECP_PHYSICS4 | ECP_RENDERING1});
         }
 
         // 4 independent tasks
         for (uint32_t i = 0; i < 4; ++i)
         {
-            ++stack_size;
-            MTaskScheduling::task_t task;
-            task.execute = independent_task;
             independent_task_args_t* args = new(task_args_memory) independent_task_args_t;
             args->some_param = 42 + i;
-            task.args = args;
-            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
-            MTaskScheduling::s_stacks[system_id][stack_size] = task;
+
+            record_task(task_stack, {independent_task, args, ECP_NONE, ECP_NONE});
         }
 
         // 10 tasks in task group 1
         num_executed_group1.store(9, std::memory_order_relaxed);
         for (uint32_t i = 0; i < 10; ++i)
         {
-            ++stack_size;
-            MTaskScheduling::task_t task;
-            task.execute = task_group1;
             task_group1_args_t* args = new(task_args_memory) task_group1_args_t;
             args->counter = &num_executed_group1;
-            task.args = args;
-            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_INPUT1;
-            MTaskScheduling::s_stacks[system_id][stack_size] = task;
+
+            record_task(task_stack, {task_group1, args, ECP_NONE, ECP_INPUT1});
         }
 
         // 4 independent tasks
         for (uint32_t i = 0; i < 4; ++i)
         {
-            ++stack_size;
-            MTaskScheduling::task_t task;
-            task.execute = independent_task;
             independent_task_args_t* args = new(task_args_memory) independent_task_args_t;
             args->some_param = 42 + i;
-            task.args = args;
-            task.checkpoints_previous_frame = MTaskScheduling::SCP_NONE;
-            task.checkpoints_current_frame = MTaskScheduling::SCP_NONE;
-            MTaskScheduling::s_stacks[system_id][stack_size] = task;
+
+            record_task(task_stack, {independent_task, args, ECP_NONE, ECP_NONE});
         }
 
-        MTaskScheduling::s_stack_sizes[system_id].store((MTaskScheduling::s_iterations[system_id] << 7) | stack_size, std::memory_order_release);
+        submit_task_recording(task_stack);
 
-        return MTaskScheduling::SCP_NONE;
+        return ECP_NONE;
     }
 
     uint64_t independent_task(void* args, uint32_t thread_id)
     {
-        MTaskScheduling::simulate_work();
+        simulate_work();
 
-        return MTaskScheduling::SCP_NONE;
+        return ECP_NONE;
     }
 
     uint64_t task_group1(void* args, uint32_t thread_id)
     {
         task_group1_args_t* pargs = (task_group1_args_t*) args;
 
-        MTaskScheduling::simulate_work();
+        simulate_work();
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
-        uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
+        uint64_t reached_checkpoints = ECP_NONE;
         if (count == 0)
-            reached_checkpoints = MTaskScheduling::SCP_RENDERING1;
+            reached_checkpoints = ECP_RENDERING1;
 
         return reached_checkpoints;
     }
@@ -204,12 +155,12 @@ namespace SRendering
     {
         task_group2_args_t* pargs = (task_group2_args_t*) args;
 
-        MTaskScheduling::simulate_work();
+        simulate_work();
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
-        uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
+        uint64_t reached_checkpoints = ECP_NONE;
         if (count == 0)
-            reached_checkpoints = MTaskScheduling::SCP_RENDERING2;
+            reached_checkpoints = ECP_RENDERING2;
 
         return reached_checkpoints;
     }
@@ -218,12 +169,12 @@ namespace SRendering
     {
         task_group3_args_t* pargs = (task_group3_args_t*) args;
 
-        MTaskScheduling::simulate_work();
+        simulate_work();
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
-        uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
+        uint64_t reached_checkpoints = ECP_NONE;
         if (count == 0)
-            reached_checkpoints = MTaskScheduling::SCP_RENDERING3;
+            reached_checkpoints = ECP_RENDERING3;
 
         return reached_checkpoints;
     }
@@ -234,12 +185,12 @@ namespace SRendering
 
         uint32_t thread_log = pargs->thread_log;
         uint32_t it = (pargs->iteration - 2) & 0x03; // all task from two iterations ago are finished
-        uint32_t num_logged_items = MTaskScheduling::profiling_i[it][thread_log];
-        MTaskScheduling::profiling_i[it][thread_log] = 0; // reset log
+        uint32_t num_logged_items = profiling_i[it][thread_log];
+        profiling_i[it][thread_log] = 0; // reset log
 
         if (key_pressed(GLFW_KEY_P))
         {
-            MTaskScheduling::profiling_item_t* log = &MTaskScheduling::profiling_log[it][thread_log][0];
+            profiling_item_t* log = &profiling_log[it][thread_log][0];
 
             double start_time = 0;
             if (pargs->start_time->compare_exchange_weak(start_time, log[0].sched_start, std::memory_order_acq_rel))
@@ -313,9 +264,9 @@ namespace SRendering
         }
 
         uint32_t count = pargs->counter->fetch_sub(1, std::memory_order_release);
-        uint64_t reached_checkpoints = MTaskScheduling::SCP_NONE;
+        uint64_t reached_checkpoints = ECP_NONE;
         if (count == 0)
-            reached_checkpoints = MTaskScheduling::SCP_RENDERING_WRITE_PERF_OVERLAY;
+            reached_checkpoints = ECP_RENDERING_WRITE_PERF_OVERLAY;
 
         return reached_checkpoints;
     }
@@ -337,6 +288,6 @@ namespace SRendering
         update_transforms((float) frame_delta.count());
         draw_frame();
 
-        return MTaskScheduling::SCP_RENDERING_PRESENT;
+        return ECP_RENDERING_PRESENT;
     }
 }

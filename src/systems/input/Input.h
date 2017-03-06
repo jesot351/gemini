@@ -1,5 +1,6 @@
 #pragma once
 
+#include "managers/TaskScheduling.h"
 #include "managers/Memory.h"
 
 #include <atomic>
@@ -10,7 +11,7 @@
 
 namespace SInput
 {
-    extern uint32_t system_id;
+    extern MTaskScheduling::task_stack_t* task_stack;
     extern MMemory::LinearAllocator32kb task_args_memory;
     struct input_loop_sync_t
     {
@@ -20,7 +21,7 @@ namespace SInput
         bool input_gathered = false;
     } extern input_loop_sync;
 
-    void init_input(uint32_t);
+    void init_input(MTaskScheduling::task_stack_t*);
     void input_loop(GLFWwindow*);
     void key_callback(GLFWwindow*, int, int, int, int);
 

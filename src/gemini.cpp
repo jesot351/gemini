@@ -32,11 +32,11 @@ int main()
     GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "gemini", nullptr, nullptr);
 
     // Initialize systems
-    SInput::init_input(0);
-    SPhysics::init_physics(1);
-    SAnimation::init_animation(2);
-    SAI::init_ai(3);
-    SRendering::init_rendering(4, window);
+    SInput::init_input(&MTaskScheduling::s_stacks[0]);
+    SPhysics::init_physics(&MTaskScheduling::s_stacks[1]);
+    SAnimation::init_animation(&MTaskScheduling::s_stacks[2]);
+    SAI::init_ai(&MTaskScheduling::s_stacks[3]);
+    SRendering::init_rendering(&MTaskScheduling::s_stacks[4], window);
 
     // Launch worker threads
     std::thread workers[MTaskScheduling::MAX_NUM_WORKER_THREADS];
@@ -60,6 +60,7 @@ int main()
 
     // Clear resources
     SRendering::clear_rendering();
+    MTaskScheduling::clear_scheduler();
     MMemory::clear_memory();
 
     // Destroy window
